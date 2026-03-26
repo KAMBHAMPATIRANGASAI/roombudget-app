@@ -6,29 +6,30 @@
 const MEMBERS = ["Ranga Sai", "Shekar", "Naveen", "Mahesh", "Vinod"];
 
 // ── App State ──────────────────────────────────────────────────────
-let months         = [];
-let currentMonthId = null;
-let editingIndex   = -1;
-let chart          = null;
+let chart = null;
 
-// ── Persistence ────────────────────────────────────────────────────
-function saveData() {
-  localStorage.setItem('expsplit_pro_v2', JSON.stringify({ months, currentMonthId }));
-}
+// Firebase CDN imports (modular)
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 
-function loadData() {
-  try {
-    const raw = localStorage.getItem('expsplit_pro_v2');
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      months         = parsed.months         || [];
-      currentMonthId = parsed.currentMonthId || null;
-    }
-  } catch (e) {
-    months = [];
-    currentMonthId = null;
-  }
-}
+import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc, query, orderBy } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+import { firebaseConfig } from './firebase-config.js';
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// Global state - Firestore driven ONLY
+let expenses = [];
+let unsubscribe = null;
+let editingId = null;
+
+
+
+
+
+// 🔥 Firebase Firestore ONLY (NO localStorage)
+
 
 // ── Month Management ───────────────────────────────────────────────
 function createMonth() {
@@ -78,7 +79,22 @@ function toggleMemberPresence(name) {
 
 // ── Init ───────────────────────────────────────────────────────────
 (function init() {
-  loadData();
+  const q = query(collection(db, "expenses"), orderBy("timestamp", "asc"));
+
+onSnapshot(q, (snapshot) => {
+  expenses = [];
+
+  snapshot.forEach((doc) => {
+    expenses.push({
+      id: doc.id,
+      ...doc.data()
+    });
+  });
+
+  console.log("🔥 LIVE DATA:", expenses);
+
+  renderFirestore();
+});
 
   if (months.length === 0) {
     createMonth();
@@ -177,13 +193,27 @@ function addExpense() {
   const forWhat = document.getElementById('forInput').value.trim();
   const amount  = parseFloat(document.getElementById('amountInput').value);
 
-  month.expenses.push({ person, forWhat, amount });
+  async function addExpense() {
+  clearErr('forInput', 'forError');
+  clearErr('amountInput', 'amountError');
+  if (!validateAddForm()) return;
 
-  document.getElementById('forInput').value    = '';
+  const person  = document.getElementById('personSelect').value;
+  const forWhat = document.getElementById('forInput').value.trim();
+  const amount  = parseFloat(document.getElementById('amountInput').value);
+
+  await addDoc(collection(db, "expenses"), {
+    person,
+    forWhat,
+    amount,
+    timestamp: Date.now()
+  });
+
+  document.getElementById('forInput').value = '';
   document.getElementById('amountInput').value = '';
-  document.getElementById('forInput').focus();
 
-  saveData();
+  showToast("🔥 Synced to Firebase", "success");
+}
   render();
   showToast(`✓ ₹${fmt(amount)} — ${forWhat} by ${person}`, 'success');
 }
@@ -501,6 +531,23 @@ function renderChart(balances) {
       }
     }
   });
+}
+
+function renderFirestore() {
+  const total = expenses.reduce((sum, e) => sum + e.amount, 0);
+  const share = total / MEMBERS.length;
+
+  document.getElementById('totalDisplay').textContent = '₹' + fmt(total);
+  document.getElementById('shareDisplay').textContent = '₹' + fmt(share);
+
+  renderTable(expenses);
+
+  const balances = calcBalances(expenses, MEMBERS, share);
+  renderBalance(balances);
+
+  const txns = calcSettlement(balances);
+  document.getElementById('txnCountDisplay').textContent = txns.length;
+  renderSettlement(txns, { expenses });
 }
 
 // ── Download Month Report ───────────────────────────────────────────

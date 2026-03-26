@@ -518,32 +518,774 @@ td { padding: 0.7rem 0.9rem; vertical-align: middle; }
 
 <div class="toast" id="toast"></div>
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
-import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, getDocs } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+<script>
+// ══════════════════════════════════════════════════════════════
+//  ExpSplit Pro — JavaScript (with IndexedDB + PDF export)
+// ══════════════════════════════════════════════════════════════
 
+// ── Configuration ─────────────────────────────────────────────
 const MEMBERS = ["Ranga Sai", "Shekar", "Naveen", "Mahesh", "Vinod"];
+const DB_NAME    = 'expsplit_pro_db';
+const DB_VERSION = 1;
+const STORE_NAME = 'appdata';
+const DATA_KEY   = 'main';
 
-// TODO: Replace these values with your Firebase project config
-const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
-};
+// ── App State ─────────────────────────────────────────────────
+let months         = [];
+let currentMonthId = null;
+let editingIndex   = -1;
+let chart          = null;
+let fileHandle     = null;
+let dbMode         = 'memory'; // 'memory' | 'file-read' | 'file-write' | 'error'
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+// ══════════════════════════════════════════════════════════════
+//  DATABASE — File System Access API (data.json)
+// ══════════════════════════════════════════════════════════════
+function setDbStatus(state, msg) {
+  const dot = document.getElementById('dbDot');
+  const txt = document.getElementById('dbStatus');
+  dot.className = 'db-dot ' + state;
+  txt.textContent = msg;
+  
+  const bar = document.getElementById('dbStatusBar');
+  if (bar) bar.style.cursor = (state === 'info' || state === 'error') ? 'pointer' : 'default';
+}
 
-let expenses = [];
-let chart = null;
+async function toggleDbFile() {
+  if (dbMode.includes('file')) {
+    await saveData();
+  } else {
+    const loaded = await loadFromFile();
+    if (loaded) render();
+  }
+  
+  showToast(dbMode.includes('file') ? '💾 Saved to data.json' : '📂 data.json loaded', 'success');
+}
 
-function fmt(value) {
-  if (value == null || isNaN(value)) return '0';
-  if (Number.isInteger(value)) return value.toLocaleString('en-IN');
-  return value.toFixed(2).replace(/\.?0+$/, '').replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+async function getFileHandle() {
+  if (fileHandle) return fileHandle;
+  
+  if ('showOpenFilePicker' in window) {
+    try {
+      [fileHandle] = await window.showOpenFilePicker({
+        types: [{ description: 'JSON files', accept: { 'application/json': ['.json'] } }],
+        suggestedName: 'data.json'
+      });
+      dbMode = 'file-read';
+      setDbStatus('connected', 'data.json loaded ✓');
+      return fileHandle;
+    } catch (e) {
+      console.log('File picker cancelled');
+    }
+  }
+  dbMode = 'memory';
+  setDbStatus('info', 'Using memory (click to load data.json)');
+  return null;
+}
+
+async function saveToFile(data) {
+  if (!fileHandle) {
+    localStorage.setItem('expsplit_fallback', JSON.stringify(data));
+    setDbStatus('info', 'Saved to memory');
+    return;
+  }
+  
+  try {
+    setDbStatus('saving', 'Saving to data.json…');
+    const writable = await fileHandle.createWritable();
+    await writable.write(JSON.stringify(data, null, 2));
+    await writable.close();
+    dbMode = 'file-write';
+    setDbStatus('connected', `data.json saved — ${data.months.length} months`);
+  } catch (e) {
+    setDbStatus('error', 'File save failed');
+    localStorage.setItem('expsplit_fallback', JSON.stringify(data));
+  }
+}
+
+async function loadFromFile() {
+  const handle = await getFileHandle();
+  if (!handle) return false;
+  
+  try {
+    const file = await handle.getFile();
+    const text = await file.text();
+    const data = JSON.parse(text);
+    months = data.months || [];
+    currentMonthId = data.currentMonthId || null;
+    setDbStatus('connected', `data.json loaded — ${months.length} months`);
+    return true;
+  } catch (e) {
+    setDbStatus('error', 'Invalid data.json');
+    return false;
+  }
+}
+
+async function saveData() {
+  await saveToFile({ months, currentMonthId });
+}
+
+async function loadData() {
+  // Use localStorage by default (no file picker)
+  try {
+    const raw = localStorage.getItem('expsplit_fallback') || localStorage.getItem('expsplit_pro_v2');
+    if (raw) {
+      const p = JSON.parse(raw);
+      months = p.months || [];
+      currentMonthId = p.currentMonthId || null;
+      setDbStatus('info', `Memory — ${months.length} months (click to load data.json)`);
+    } else {
+      setDbStatus('info', 'Ready — click to load data.json');
+    }
+  } catch (e) {
+    setDbStatus('error', 'Storage unavailable');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  MONTH MANAGEMENT
+// ══════════════════════════════════════════════════════════════
+function createMonth() {
+  const now  = new Date();
+  const id   = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const name = now.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+  if (months.find(m => m.id === id)) { showToast(`${name} already exists`, 'error'); return; }
+  months.push({ id, name, present: [...MEMBERS], expenses: [] });
+  currentMonthId = id;
+  saveData();
+  renderMonthSelector();
+  renderMembersStrip();
+  render();
+  showToast(`✓ ${name} created`, 'success');
+}
+
+function selectMonth(id) {
+  currentMonthId = id;
+  renderMonthSelector();
+  renderMembersStrip();
+  render();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  MEMBER PRESENCE
+// ══════════════════════════════════════════════════════════════
+function toggleMemberPresence(name) {
+  const month = getMonth();
+  if (!month) return;
+  const idx = month.present.indexOf(name);
+  if (idx > -1) { month.present.splice(idx, 1); showToast(`${name} marked absent`, 'info'); }
+  else           { month.present.push(name);     showToast(`${name} marked present`, 'success'); }
+  saveData(); renderMembersStrip(); render();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════════════
+(async function init() {
+  await loadData();
+
+  if (months.length === 0) {
+    createMonth();
+  } else if (!currentMonthId || !months.find(m => m.id === currentMonthId)) {
+    currentMonthId = months[months.length - 1].id;
+  }
+
+  ['personSelect', 'editPerson'].forEach(id => {
+    const sel = document.getElementById(id);
+    MEMBERS.forEach(name => {
+      const opt = document.createElement('option');
+      opt.value = opt.textContent = name;
+      sel.appendChild(opt);
+    });
+  });
+
+  ['forInput', 'amountInput'].forEach(id =>
+    document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') addExpense(); }));
+  ['editFor', 'editAmount'].forEach(id =>
+    document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') saveEdit(); }));
+
+  document.getElementById('forInput').addEventListener('input',    () => clearErr('forInput',    'forError'));
+  document.getElementById('amountInput').addEventListener('input', () => clearErr('amountInput', 'amountError'));
+  document.getElementById('editFor').addEventListener('input',     () => clearErr('editFor',     'editForError'));
+  document.getElementById('editAmount').addEventListener('input',  () => clearErr('editAmount',  'editAmountError'));
+
+  renderMonthSelector(); renderMembersStrip(); render();
+})();
+
+// PWA Service Worker Registration
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js')
+      .then(reg => console.log('SW registered'))
+      .catch(err => console.log('SW failed'));
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+//  VALIDATION
+// ══════════════════════════════════════════════════════════════
+function setErr(inputId, errorId, msg) {
+  document.getElementById(inputId).classList.add('err');
+  const el = document.getElementById(errorId);
+  el.textContent = '⚠ ' + msg; el.classList.add('show');
+  document.getElementById(inputId).focus();
+}
+function clearErr(inputId, errorId) {
+  document.getElementById(inputId).classList.remove('err');
+  document.getElementById(errorId).classList.remove('show');
+}
+function checkForWhat(val) {
+  if (!val || val.trim() === '') return 'Please describe what this was spent on.';
+  if (val.trim().length < 2)     return 'Too short — at least 2 characters required.';
+  if (/^\d+(\.\d+)?$/.test(val.trim())) return 'That looks like a number. Please enter an item name.';
+  if (/^[^a-zA-Z\u0900-\u097F]+$/.test(val.trim())) return 'Item name must contain at least one letter.';
+  return null;
+}
+function checkAmount(raw) {
+  if (!raw || raw.trim() === '') return 'Amount cannot be empty.';
+  const n = parseFloat(raw);
+  if (isNaN(n))  return 'Not a valid number.';
+  if (n <= 0)    return 'Amount must be greater than ₹0.';
+  if (n > 9999999) return 'Amount seems too large. Please double-check.';
+  return null;
+}
+function validateAddForm() {
+  const fe = checkForWhat(document.getElementById('forInput').value);
+  const ae = checkAmount(document.getElementById('amountInput').value);
+  if (fe) setErr('forInput', 'forError', fe);
+  if (ae) setErr('amountInput', 'amountError', ae);
+  return !fe && !ae;
+}
+function validateEditForm() {
+  const fe = checkForWhat(document.getElementById('editFor').value);
+  const ae = checkAmount(document.getElementById('editAmount').value);
+  if (fe) setErr('editFor', 'editForError', fe);
+  if (ae) setErr('editAmount', 'editAmountError', ae);
+  return !fe && !ae;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  CRUD
+// ══════════════════════════════════════════════════════════════
+function addExpense() {
+  if (!currentMonthId) { showToast('Please select or create a month first', 'error'); return; }
+  clearErr('forInput', 'forError'); clearErr('amountInput', 'amountError');
+  if (!validateAddForm()) return;
+  const month   = getMonth();
+  const person  = document.getElementById('personSelect').value;
+  const forWhat = document.getElementById('forInput').value.trim();
+  const amount  = parseFloat(document.getElementById('amountInput').value);
+  month.expenses.push({ person, forWhat, amount });
+  document.getElementById('forInput').value = '';
+  document.getElementById('amountInput').value = '';
+  document.getElementById('forInput').focus();
+  saveData(); render();
+  showToast(`✓ ₹${fmt(amount)} — ${forWhat} by ${person}`, 'success');
+}
+
+function deleteExpense(i) {
+  const month = getMonth(); if (!month) return;
+  const e = month.expenses[i];
+  if (!confirm(`Delete this expense?\n\n👤 ${e.person}\n🛒 ${e.forWhat}\n💰 ₹${fmt(e.amount)}`)) return;
+  month.expenses.splice(i, 1);
+  saveData(); render(); showToast('Expense deleted', 'error');
+}
+
+function openEdit(i) {
+  const month = getMonth(); if (!month) return;
+  editingIndex = i;
+  const e = month.expenses[i];
+  document.getElementById('editPerson').value = e.person;
+  document.getElementById('editFor').value    = e.forWhat;
+  document.getElementById('editAmount').value = e.amount;
+  document.getElementById('editRowNum').textContent = `#${i + 1}`;
+  clearErr('editFor', 'editForError'); clearErr('editAmount', 'editAmountError');
+  document.getElementById('editModal').classList.add('open');
+  setTimeout(() => document.getElementById('editFor').focus(), 200);
+}
+
+function saveEdit() {
+  if (editingIndex === -1) return;
+  clearErr('editFor', 'editForError'); clearErr('editAmount', 'editAmountError');
+  if (!validateEditForm()) return;
+  const month = getMonth();
+  const np = document.getElementById('editPerson').value;
+  const nf = document.getElementById('editFor').value.trim();
+  const na = parseFloat(document.getElementById('editAmount').value);
+  const old = month.expenses[editingIndex];
+  const changes = [];
+  if (old.person !== np)  changes.push(`Person: ${old.person} → ${np}`);
+  if (old.forWhat !== nf) changes.push(`Item: ${old.forWhat} → ${nf}`);
+  if (old.amount !== na)  changes.push(`Amount: ₹${fmt(old.amount)} → ₹${fmt(na)}`);
+  month.expenses[editingIndex] = { person: np, forWhat: nf, amount: na };
+  closeModal(); saveData(); render();
+  showToast(changes.length ? '✏️ ' + changes.join(' | ') : 'No changes made', 'info');
+}
+
+function closeModal() {
+  document.getElementById('editModal').classList.remove('open');
+  editingIndex = -1;
+}
+function handleOverlayClick(e) {
+  if (e.target === document.getElementById('editModal')) closeModal();
+}
+
+function resetAll() {
+  const month = getMonth(); if (!month) return;
+  if (month.expenses.length === 0) { showToast('Nothing to reset', 'error'); return; }
+  if (!confirm(`Delete ALL ${month.expenses.length} expenses for ${month.name}? Cannot be undone.`)) return;
+  month.expenses = [];
+  saveData(); render(); showToast('↺ All expenses cleared', 'error');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  RENDER
+// ══════════════════════════════════════════════════════════════
+function render() {
+  const month = getMonth(); if (!month) return;
+  const total = month.expenses.reduce((s, e) => s + e.amount, 0);
+  const shareCount = month.present.length || 1;
+  const share = total / shareCount;
+  document.getElementById('totalDisplay').textContent = '₹' + fmt(total);
+  document.getElementById('shareDisplay').textContent = '₹' + fmt(share);
+  renderTable(month.expenses);
+  const balances = calcBalances(month.expenses, month.present, share);
+  renderBalance(balances);
+  const txns = calcSettlement(balances);
+  document.getElementById('txnCountDisplay').textContent = txns.length;
+  renderSettlement(txns, month);
+  renderChart(balances);
+}
+
+function renderMonthSelector() {
+  const el = document.getElementById('monthSelector');
+  let html = months.map(m =>
+    `<button class="month-btn ${m.id === currentMonthId ? 'active' : ''}" onclick="selectMonth('${m.id}')">${m.name}</button>`
+  ).join('');
+  html += `<button class="month-btn add-btn" onclick="createMonth()">+ Add Month</button>`;
+  el.innerHTML = html;
+}
+
+function renderMembersStrip() {
+  const el = document.getElementById('membersStrip');
+  const month = getMonth();
+  if (!month) { el.innerHTML = ''; return; }
+  el.innerHTML = MEMBERS.map(name => {
+    const isPresent = month.present.includes(name);
+    const cls  = isPresent ? 'present' : 'absent';
+    const icon = isPresent ? '✓' : '✕';
+    return `<div class="member-chip ${cls}" onclick="toggleMemberPresence('${name}')" title="${name}">
+      <span class="chip-dot"></span>${name}<span class="chip-toggle">${icon}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderTable(expenses) {
+  const tbody = document.getElementById('expenseBody');
+  if (!expenses.length) {
+    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><div class="empty-icon">📋</div>No expenses yet — add one above</div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = expenses.map((e, i) => `
+    <tr>
+      <td class="td-num">${i + 1}</td>
+      <td class="td-name">${e.person}</td>
+      <td><span class="td-for" title="${e.forWhat}">${e.forWhat}</span></td>
+      <td class="td-amt">₹${fmt(e.amount)}</td>
+      <td><div class="action-btns">
+        <button class="icon-btn edit" onclick="openEdit(${i})" title="Edit">✏️</button>
+        <button class="icon-btn del"  onclick="deleteExpense(${i})" title="Delete">🗑</button>
+      </div></td>
+    </tr>`).join('');
+}
+
+function calcBalances(expenses, presentMembers, share) {
+  const paid = {}; MEMBERS.forEach(m => (paid[m] = 0));
+  expenses.forEach(e => (paid[e.person] += e.amount));
+  return presentMembers.map(name => ({ name, paid: paid[name], share, balance: paid[name] - share }));
+}
+
+function renderBalance(balances) {
+  const el = document.getElementById('balanceSummary');
+  if (!balances.length) { el.innerHTML = `<div class="empty-state"><div class="empty-icon">⚖️</div>Add expenses to see balances</div>`; return; }
+  const maxAbs = Math.max(...balances.map(b => Math.abs(b.balance)), 1);
+  el.innerHTML = `<div class="balance-grid">` + balances.map(b => {
+    const pct   = Math.round((Math.abs(b.balance) / maxAbs) * 100);
+    const cls   = b.balance > 0.01 ? 'recv' : b.balance < -0.01 ? 'pay' : 'even';
+    const label = b.balance > 0.01 ? `+₹${fmt(b.balance)} to receive`
+                : b.balance < -0.01 ? `-₹${fmt(Math.abs(b.balance))} to pay` : 'Settled ✓';
+    const init = b.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+    return `<div class="balance-row">
+      <div class="balance-name"><div class="avatar ${cls}">${init}</div><span class="balance-name-text">${b.name}</span></div>
+      <div class="balance-bar-wrap"><div class="balance-bar ${cls}" style="width:${pct}%"></div></div>
+      <div class="balance-sub">Paid ₹${fmt(b.paid)} · Share ₹${fmt(b.share)}</div>
+      <div class="balance-amount ${cls}">${label}</div>
+    </div>`;
+  }).join('') + `</div>`;
+}
+
+function calcSettlement(balances) {
+  const people    = balances.map(b => ({ name: b.name, balance: +b.balance.toFixed(2) }));
+  const creditors = people.filter(p => p.balance >  0.01).sort((a, b) => b.balance - a.balance);
+  const debtors   = people.filter(p => p.balance < -0.01).sort((a, b) => a.balance - b.balance);
+  const txns = []; let ci = 0, di = 0;
+  while (ci < creditors.length && di < debtors.length) {
+    const cr = creditors[ci], db_ = debtors[di];
+    const amt = Math.min(cr.balance, Math.abs(db_.balance));
+    if (amt > 0.01) txns.push({ from: db_.name, to: cr.name, amount: +amt.toFixed(2) });
+    cr.balance -= amt; db_.balance += amt;
+    if (Math.abs(cr.balance) < 0.01) ci++;
+    if (Math.abs(db_.balance) < 0.01) di++;
+  }
+  return txns;
+}
+
+function renderSettlement(txns, month) {
+  const el = document.getElementById('settlementList');
+  if (!month || month.expenses.length === 0) { el.innerHTML = `<div class="empty-state"><div class="empty-icon">🤝</div>No expenses yet</div>`; return; }
+  if (txns.length === 0) { el.innerHTML = `<div class="all-settled"><div class="icon">🎉</div>Everyone is perfectly settled!</div>`; return; }
+  el.innerHTML = `<div class="txn-list">` + txns.map(t => {
+    const fi = t.from.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+    const ti = t.to.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+    return `<div class="txn">
+      <div class="txn-left">
+        <div class="avatar pay" title="${t.from}">${fi}</div>
+        <div class="txn-info">
+          <div class="txn-from"><strong>${t.from}</strong> pays</div>
+          <div class="txn-to">→ <span>${t.to}</span></div>
+        </div>
+        <div class="avatar recv" title="${t.to}">${ti}</div>
+      </div>
+      <div class="txn-amount">₹${fmt(t.amount)}</div>
+    </div>`;
+  }).join('') + `</div>`;
+}
+
+function renderChart(balances) {
+  const canvas = document.getElementById('expenseChart'); if (!canvas) return;
+  if (chart) { chart.destroy(); chart = null; }
+  const hasPaid = balances.filter(b => b.paid > 0); if (!hasPaid.length) return;
+  const COLORS = ['#0d9488', '#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
+  chart = new Chart(canvas.getContext('2d'), {
+    type: 'doughnut',
+    data: {
+      labels: hasPaid.map(b => b.name),
+      datasets: [{ data: hasPaid.map(b => b.paid), backgroundColor: COLORS.slice(0, hasPaid.length), borderColor: '#fff', borderWidth: 3, hoverOffset: 6 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '65%',
+      plugins: {
+        legend: { position: 'bottom', labels: { color: '#334155', font: { family: "'Plus Jakarta Sans', sans-serif", size: 12, weight: '600' }, padding: 16, usePointStyle: true, pointStyle: 'circle' } },
+        tooltip: { backgroundColor: '#fff', titleColor: '#0f172a', bodyColor: '#334155', borderColor: '#e2e8f0', borderWidth: 1, padding: 12, cornerRadius: 8, callbacks: { label: ctx => `  Paid: ₹${fmt(ctx.parsed)}` } }
+      }
+    }
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+//  MONTH PICKER MODAL
+// ══════════════════════════════════════════════════════════════
+function openMonthPicker() {
+  const grid = document.getElementById('monthPickerGrid');
+  if (months.length === 0) {
+    grid.innerHTML = `<div class="picker-empty">No months available. Create a month first.</div>`;
+  } else {
+    grid.innerHTML = months.map(m => {
+      const total = m.expenses.reduce((s, e) => s + e.amount, 0);
+      const count = m.expenses.length;
+      return `<div class="month-pick-card" onclick="downloadMonthPDF('${m.id}')">
+        <div class="pick-icon">📅</div>
+        <div class="month-pick-name">${m.name}</div>
+        <div class="month-pick-meta">${count} expense${count !== 1 ? 's' : ''} · ₹${fmt(total)}</div>
+      </div>`;
+    }).join('');
+  }
+  document.getElementById('monthPickerModal').classList.add('open');
+}
+
+function closeMonthPicker() {
+  document.getElementById('monthPickerModal').classList.remove('open');
+}
+
+function handlePickerOverlayClick(e) {
+  if (e.target === document.getElementById('monthPickerModal')) closeMonthPicker();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  PDF GENERATION
+// ══════════════════════════════════════════════════════════════
+function downloadMonthPDF(monthId) {
+  closeMonthPicker();
+
+  const month = months.find(m => m.id === monthId);
+  if (!month) { showToast('Month not found', 'error'); return; }
+
+  showToast(`⏳ Generating PDF for ${month.name}…`, 'info');
+
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+    const total      = month.expenses.reduce((s, e) => s + e.amount, 0);
+    const presentM   = month.present;
+    const shareCount = presentM.length || 1;
+    const share      = total / shareCount;
+    const balances   = calcBalances(month.expenses, presentM, share);
+    const txns       = calcSettlement(balances);
+    const absentM    = MEMBERS.filter(m => !month.present.includes(m));
+    const now        = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+
+    const PW   = 210; // A4 width mm
+    const ML   = 14;  // margin left
+    const MR   = 14;  // margin right
+    const CW   = PW - ML - MR; // content width
+    let   y    = 0;
+
+    // ── GLOBAL TABLE COLUMNS ──────────────────────────────
+    const COLS_EXPENSE = {
+      NUM:    { x: ML+5,  w: 12, align: 'left'  },
+      PERSON: { x: ML+20, w: 35, align: 'left'  },
+      ITEM:   { x: ML+60, w: 55, align: 'left'  },
+      AMOUNT: { x: ML+120,w: 30, align: 'right' }
+    };
+    const COLS_BALANCE = {
+      NAME:   { x: ML+5,  w: 40, align: 'left'  },
+      PAID:   { x: ML+50, w: 35, align: 'right' },
+      SHARE:  { x: ML+90, w: 35, align: 'right' },
+      BALANCE:{ x: ML+130,w: 45, align: 'right' }
+    };
+    const COLS_SETTLE = {
+      FROM:   { x: ML+5,  w: 35, align: 'left'  },
+      ARROW:  { x: ML+45, w: 25, align: 'center'},
+      TO:     { x: ML+75, w: 35, align: 'left'  },
+      AMOUNT: { x: ML+120,w: 30, align: 'right' }
+    };
+
+    // ── Helper: new page check ─────────────────────────────
+    function checkPage(needed = 15) {
+      if (y + needed > 275) { doc.addPage(); y = 18; }
+    }
+
+    // ── HEADER GRADIENT BAR ───────────────────────────────
+    doc.setFillColor(13, 148, 136);
+    doc.rect(0, 0, PW, 42, 'F');
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(22); doc.setFont('helvetica', 'bold');
+    doc.text('ExpSplit Pro', ML, 16);
+
+    doc.setFontSize(11); doc.setFont('helvetica', 'normal');
+    doc.text(`${month.name} — Expense Report`, ML, 24);
+
+    if (absentM.length) {
+      doc.setFontSize(8);
+      doc.text(`Absent: ${absentM.join(', ')}`, ML, 31);
+    }
+
+    doc.setFontSize(8);
+    doc.text(`Generated: ${now}`, PW - MR, 16, { align: 'right' });
+    doc.text(`Members present: ${presentM.length}`, PW - MR, 22, { align: 'right' });
+
+    y = 50;
+
+    // ── SUMMARY BOXES ─────────────────────────────────────
+    const boxW = (CW - 8) / 3;
+    const boxes = [
+      { label: 'Total Spent',    value: `Rs. ${fmt(total)}`,  color: [13, 148, 136] },
+      { label: 'Per Person',     value: `Rs. ${fmt(share)}`,  color: [16, 185, 129] },
+      { label: 'Settlements',    value: `${txns.length}`,     color: [245, 158, 11]  },
+    ];
+    boxes.forEach((b, i) => {
+      const bx = ML + i * (boxW + 4);
+      doc.setFillColor(248, 250, 252);
+      doc.roundedRect(bx, y, boxW, 20, 3, 3, 'F');
+      doc.setDrawColor(...b.color); doc.setLineWidth(0.6);
+      doc.roundedRect(bx, y, boxW, 20, 3, 3, 'S');
+      doc.setFillColor(...b.color);
+      doc.rect(bx, y, 3, 20, 'F');
+      doc.setFontSize(6.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(100, 116, 139);
+      doc.text(b.label.toUpperCase(), bx + 6, y + 7);
+      doc.setFontSize(13); doc.setFont('helvetica', 'bold'); doc.setTextColor(...b.color);
+      doc.text(b.value, bx + 6, y + 15);
+    });
+    y += 28;
+
+    // ── SECTION TITLE helper ──────────────────────────────
+    function sectionTitle(title, color = [13, 148, 136]) {
+      checkPage(12);
+      doc.setFillColor(...color);
+      doc.rect(ML, y, 3, 6, 'F');
+      doc.setFontSize(8); doc.setFont('helvetica', 'bold');
+      doc.setTextColor(100, 116, 139);
+      doc.text(title.toUpperCase(), ML + 6, y + 4.5);
+      y += 10;
+    }
+
+    // ── TABLE helper ──────────────────────────────────────
+    function drawTableRow(cols, rowY, isHeader = false, altBg = false) {
+      if (isHeader) {
+        doc.setFillColor(248, 250, 252);
+        doc.rect(ML, rowY - 4.5, CW, 8, 'F');
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(100, 116, 139);
+      } else {
+        if (altBg) { doc.setFillColor(250, 252, 254); doc.rect(ML, rowY - 4.5, CW, 7.5, 'F'); }
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(51, 65, 85);
+      }
+      cols.forEach(col => {
+        doc.text(col.text, col.x, rowY, { align: col.align || 'left', maxWidth: col.w || 40 });
+      });
+      doc.setDrawColor(226, 232, 240); doc.setLineWidth(0.2);
+      doc.line(ML, rowY + 3, ML + CW, rowY + 3);
+    }
+
+    // ── EXPENSE LOG ───────────────────────────────────────
+    sectionTitle('Expense Log', [13, 148, 136]);
+    checkPage(10);
+    drawTableRow([
+      { text: '#',         x: ML + 2,        align: 'left'  },
+      { text: 'Paid By',   x: ML + 12,       align: 'left'  },
+      { text: 'Spent On',  x: ML + 60,       align: 'left'  },
+      { text: 'Amount',    x: ML + CW - 2,   align: 'right' },
+    ], y, true);
+    y += 8;
+
+    if (month.expenses.length === 0) {
+      doc.setFontSize(8); doc.setTextColor(148, 163, 184); doc.setFont('helvetica', 'italic');
+      doc.text('No expenses recorded', ML + CW / 2, y, { align: 'center' });
+      y += 8;
+    } else {
+      month.expenses.forEach((e, i) => {
+        checkPage(10);
+        const desc = e.forWhat.length > 40 ? e.forWhat.slice(0, 37) + '…' : e.forWhat;
+        drawTableRow([
+          { text: String(i + 1),       x: ML + 2,        align: 'left'  },
+          { text: e.person,            x: ML + 12,       align: 'left'  },
+          { text: desc,                x: ML + 60,       align: 'left'  },
+          { text: `Rs. ${fmt(e.amount)}`, x: ML + CW - 2, align: 'right' },
+        ], y, false, i % 2 === 1);
+        y += 8;
+      });
+      // Total row
+      checkPage(10);
+      doc.setFillColor(235, 252, 248);
+      doc.rect(ML, y - 4.5, CW, 8.5, 'F');
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(13, 148, 136);
+      doc.text('TOTAL', ML + 60, y);
+      doc.text(`Rs. ${fmt(total)}`, ML + CW - 2, y, { align: 'right' });
+      y += 12;
+    }
+
+    // ── BALANCE ───────────────────────────────────────────
+    sectionTitle('Balance per Person', [16, 185, 129]);
+    
+    // Fixed column positions to prevent overlap
+    const COL_NAME   = { x: ML + 5,  w: 40, align: 'left'  };
+    const COL_PAID   = { x: ML + 50, w: 35, align: 'right' };
+    const COL_SHARE  = { x: ML + 90, w: 35, align: 'right' };
+    const COL_BALANCE= { x: ML + 130, w: 45, align: 'right' };
+    
+    checkPage(10);
+    drawTableRow([
+      { text: 'NAME',    x: COL_NAME.x,   align: COL_NAME.align,  w: COL_NAME.w },
+      { text: 'PAID',    x: COL_PAID.x,   align: COL_PAID.align,  w: COL_PAID.w },
+      { text: 'SHARE',   x: COL_SHARE.x,  align: COL_SHARE.align, w: COL_SHARE.w },
+      { text: 'BALANCE', x: COL_BALANCE.x, align: COL_BALANCE.align, w: COL_BALANCE.w }
+    ], y, true);
+    y += 8;
+
+    balances.forEach((b, i) => {
+      checkPage(10);
+      const isRecv = b.balance > 0.01;
+      const isPay  = b.balance < -0.01;
+      const balanceStr = isRecv ? `+Rs. ${fmt(b.balance)}` 
+                      : isPay  ? `-Rs. ${fmt(Math.abs(b.balance))}` 
+                      : 'Settled ✓';
+      
+      drawTableRow([
+        { text: b.name.slice(0, 25), x: COL_NAME.x,   align: COL_NAME.align,  w: COL_NAME.w },
+        { text: `Rs. ${fmt(b.paid)}`, x: COL_PAID.x,   align: COL_PAID.align,  w: COL_PAID.w },
+        { text: `Rs. ${fmt(b.share)}`,x: COL_SHARE.x,  align: COL_SHARE.align, w: COL_SHARE.w },
+        { text: balanceStr,           x: COL_BALANCE.x,align: COL_BALANCE.align,w: COL_BALANCE.w }
+      ], y, false, i % 2 === 1);
+      
+      // Color balance column
+      const col = isRecv ? [16,185,129] : isPay ? [239,68,68] : [100,116,139];
+      doc.setTextColor(...col); 
+      doc.setFont('helvetica', 'bold'); 
+      doc.setFontSize(8);
+      doc.text(balanceStr, COL_BALANCE.x, y, { align: 'right', maxWidth: COL_BALANCE.w });
+      doc.setTextColor(51, 65, 85); 
+      doc.setFont('helvetica', 'normal');
+      
+      y += 9; // Increased row height
+    });
+    y += 6;
+
+    // ── SETTLEMENT ────────────────────────────────────────
+    sectionTitle('Final Settlement', [245, 158, 11]);
+    checkPage(12);
+
+    if (txns.length === 0) {
+      doc.setFillColor(209, 250, 229); doc.roundedRect(ML, y - 2, CW, 14, 3, 3, 'F');
+      doc.setDrawColor(16, 185, 129); doc.setLineWidth(0.5);
+      doc.roundedRect(ML, y - 2, CW, 14, 3, 3, 'S');
+      doc.setFontSize(10); doc.setFont('helvetica', 'bold'); doc.setTextColor(5, 150, 105);
+      doc.text('Everyone is perfectly settled!', PW / 2, y + 6, { align: 'center' });
+      y += 18;
+    } else {
+      drawTableRow([
+        { text: 'From',   x: ML + 2,       align: 'left'  },
+        { text: '',       x: ML + 65,      align: 'center'},
+        { text: 'To',     x: ML + 105,     align: 'left'  },
+        { text: 'Amount', x: ML + CW - 2,  align: 'right' },
+      ], y, true);
+      y += 8;
+
+      txns.forEach((t, i) => {
+        checkPage(10);
+        drawTableRow([], y, false, i % 2 === 1);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(15, 23, 42);
+        doc.text(t.from, ML + 2, y);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(100, 116, 139);
+        doc.text('→ pays →', ML + 65, y);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(13, 148, 136);
+        doc.text(t.to, ML + 105, y);
+        doc.setFontSize(9); doc.setTextColor(13, 148, 136);
+        doc.text(`Rs. ${fmt(t.amount)}`, ML + CW - 2, y, { align: 'right' });
+        y += 8;
+      });
+    }
+
+    // ── FOOTER ────────────────────────────────────────────
+    const totalPages = doc.getNumberOfPages();
+    for (let p = 1; p <= totalPages; p++) {
+      doc.setPage(p);
+      doc.setDrawColor(226, 232, 240); doc.setLineWidth(0.4);
+      doc.line(ML, 285, PW - MR, 285);
+      doc.setFontSize(7); doc.setFont('helvetica', 'normal'); doc.setTextColor(148, 163, 184);
+      doc.text(`ExpSplit Pro  •  ${month.name} Report  •  Generated ${now}  •  All amounts in Indian Rupees`, PW / 2, 290, { align: 'center' });
+      doc.text(`Page ${p} of ${totalPages}`, PW - MR, 290, { align: 'right' });
+    }
+
+    const fileName = `ExpSplit_${month.name.replace(/\s+/g, '_')}_Report.pdf`;
+    doc.save(fileName);
+    showToast(`✅ PDF downloaded — ${month.name}`, 'success');
+
+  } catch (err) {
+    console.error('PDF generation error:', err);
+    showToast('PDF error — check console', 'error');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  UTILITIES
+// ══════════════════════════════════════════════════════════════
+function getMonth() { return months.find(m => m.id === currentMonthId) || null; }
+
+function fmt(n) {
+  if (n === undefined || n === null || isNaN(n)) return '0';
+  if (Number.isInteger(n)) return n.toLocaleString('en-IN');
+  return n.toFixed(2).replace(/\.?0+$/, '').replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
 function showToast(msg, type = 'success') {
@@ -553,278 +1295,6 @@ function showToast(msg, type = 'success') {
   clearTimeout(t._timer);
   t._timer = setTimeout(() => { t.className = 'toast'; }, 3400);
 }
-
-function clearErr(inputId, errorId) {
-  const input = document.getElementById(inputId);
-  const err = document.getElementById(errorId);
-  if (input) input.classList.remove('err');
-  if (err) err.classList.remove('show');
-}
-
-function setErr(inputId, errorId, msg) {
-  const input = document.getElementById(inputId);
-  const err = document.getElementById(errorId);
-  if (input) input.classList.add('err');
-  if (err) {
-    err.textContent = '⚠ ' + msg;
-    err.classList.add('show');
-  }
-}
-
-function checkForWhat(val) {
-  if (!val || val.trim() === '') return 'Please describe what this was spent on.';
-  if (val.trim().length < 2) return 'Too short — at least 2 characters required.';
-  if (/^\d+(\.\d+)?$/.test(val.trim())) return 'That looks like a number. Please enter an item name.';
-  if (/^[^a-zA-Z\u0900-\u097F]+$/.test(val.trim())) return 'Item name must contain at least one letter.';
-  return null;
-}
-
-function checkAmount(raw) {
-  if (!raw || raw.trim() === '') return 'Amount cannot be empty.';
-  const n = parseFloat(raw);
-  if (isNaN(n)) return 'Not a valid number. Please enter digits (e.g. 500).';
-  if (n <= 0) return 'Amount must be greater than ₹0.';
-  if (n > 9999999) return 'Amount seems too large. Please double-check.';
-  return null;
-}
-
-function clearExpenseUI() {
-  // no-op; all state from Firestore
-}
-
-function renderExpenses(list) {
-  const tbody = document.getElementById('expenseBody');
-  if (!tbody) return;
-
-  if (!list || list.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><div class="empty-icon">📋</div>No expenses yet</div></td></tr>`;
-    return;
-  }
-
-  tbody.innerHTML = list.map((e, i) => `
-    <tr>
-      <td class="td-num">${i + 1}</td>
-      <td class="td-name">${e.person}</td>
-      <td><span class="td-for" title="${e.item}">${e.item}</span></td>
-      <td class="td-amt">₹${fmt(e.amount)}</td>
-      <td><div class="action-btns"><button class="icon-btn del" onclick="deleteExpenseFirestore('${e.id}')" title="Delete">🗑</button></div></td>
-    </tr>`).join('');
-}
-
-function calculateTotals(list) {
-  const total = (list || []).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-  const share = MEMBERS.length ? total / MEMBERS.length : 0;
-  document.getElementById('totalDisplay').textContent = '₹' + fmt(total);
-  document.getElementById('shareDisplay').textContent = '₹' + fmt(share);
-  return { total, share };
-}
-
-function calcBalances(list, share) {
-  const paidMap = {}; MEMBERS.forEach(m => paidMap[m] = 0);
-  (list || []).forEach(e => {
-    if (paidMap[e.person] !== undefined) paidMap[e.person] += Number(e.amount) || 0;
-  });
-
-  return MEMBERS.map(name => ({
-    name,
-    paid: paidMap[name],
-    share,
-    balance: paidMap[name] - share
-  }));
-}
-
-function renderBalance(balances) {
-  const el = document.getElementById('balanceSummary');
-  if (!el) return;
-  if (!balances || balances.length === 0) {
-    el.innerHTML = `<div class="empty-state"><div class="empty-icon">⚖️</div>Add expenses to see balances</div>`;
-    return;
-  }
-
-  const maxAbs = Math.max(...balances.map(b => Math.abs(b.balance)), 1);
-  el.innerHTML = `<div class="balance-grid">` + balances.map(b => {
-    const pct = Math.round((Math.abs(b.balance) / maxAbs) * 100);
-    const cls = b.balance > 0.01 ? 'recv' : b.balance < -0.01 ? 'pay' : 'even';
-    const label = b.balance > 0.01 ? `+₹${fmt(b.balance)} to receive` : b.balance < -0.01 ? `-₹${fmt(Math.abs(b.balance))} to pay` : 'Settled ✓';
-    const init = b.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-    return `<div class="balance-row"><div class="balance-name"><div class="avatar ${cls}">${init}</div><span class="balance-name-text">${b.name}</span></div><div class="balance-bar-wrap"><div class="balance-bar ${cls}" style="width:${pct}%"></div></div><div class="balance-sub">Paid ₹${fmt(b.paid)} · Share ₹${fmt(b.share)}</div><div class="balance-amount ${cls}">${label}</div></div>`;
-  }).join('') + `</div>`;
-}
-
-function calcSettlement(balances) {
-  const people = balances.map(b => ({ name: b.name, balance: +b.balance.toFixed(2) }));
-  const creditors = people.filter(p => p.balance > 0.01).sort((a, b) => b.balance - a.balance);
-  const debtors = people.filter(p => p.balance < -0.01).sort((a, b) => a.balance - b.balance);
-  const txns = [];
-  let ci = 0, di = 0;
-
-  while (ci < creditors.length && di < debtors.length) {
-    const cr = creditors[ci];
-    const db_ = debtors[di];
-    const amt = Math.min(cr.balance, Math.abs(db_.balance));
-    if (amt > 0.01) txns.push({ from: db_.name, to: cr.name, amount: +amt.toFixed(2) });
-    cr.balance -= amt;
-    db_.balance += amt;
-    if (Math.abs(cr.balance) < 0.01) ci++;
-    if (Math.abs(db_.balance) < 0.01) di++;
-  }
-
-  return txns;
-}
-
-function renderSettlement(txns) {
-  const el = document.getElementById('settlementList');
-  if (!el) return;
-  if (!txns || txns.length === 0) {
-    el.innerHTML = `<div class="empty-state"><div class="empty-icon">🤝</div>No settlements needed yet</div>`;
-    return;
-  }
-
-  el.innerHTML = `<div class="txn-list">` + txns.map(t => {
-    const fi = t.from.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-    const ti = t.to.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-    return `<div class="txn"><div class="txn-left"><div class="avatar pay" title="${t.from}">${fi}</div><div class="txn-info"><div class="txn-from"><strong>${t.from}</strong> pays</div><div class="txn-to">→ <span>${t.to}</span></div></div><div class="avatar recv" title="${t.to}">${ti}</div></div><div class="txn-amount">₹${fmt(t.amount)}</div></div>`;
-  }).join('') + `</div>`;
-}
-
-function renderChart(balances) {
-  const canvas = document.getElementById('expenseChart');
-  if (!canvas) return;
-  if (chart) { chart.destroy(); chart = null; }
-  const hasPaid = balances.filter(b => b.paid > 0);
-  if (!hasPaid.length) return;
-
-  const COLORS = ['#0d9488', '#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
-  chart = new Chart(canvas.getContext('2d'), {
-    type: 'doughnut',
-    data: {
-      labels: hasPaid.map(b => b.name),
-      datasets: [{ data: hasPaid.map(b => b.paid), backgroundColor: COLORS.slice(0, hasPaid.length), borderColor: '#fff', borderWidth: 3, hoverOffset: 6 }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      cutout: '65%',
-      plugins: {
-        legend: { position: 'bottom', labels: { color: '#334155', font: { family: "'Plus Jakarta Sans', sans-serif", size: 12, weight: '600' }, padding: 16, usePointStyle: true, pointStyle: 'circle' } },
-        tooltip: { backgroundColor: '#fff', titleColor: '#0f172a', bodyColor: '#334155', borderColor: '#e2e8f0', borderWidth: 1, padding: 12, cornerRadius: 8, callbacks: { label: ctx => `  Paid: ₹${fmt(ctx.parsed)}` } }
-      }
-    }
-  });
-}
-
-function updateUI() {
-  clearExpenseUI();
-  renderExpenses(expenses);
-  const { share } = calculateTotals(expenses);
-  const balances = calcBalances(expenses, share);
-  renderBalance(balances);
-  const txns = calcSettlement(balances);
-  document.getElementById('txnCountDisplay').textContent = txns.length;
-  renderSettlement(txns);
-  renderChart(balances);
-}
-
-async function addExpenseFirebase(person, item, amount) {
-  await addDoc(collection(db, 'expenses'), {
-    person,
-    item,
-    amount: Number(amount),
-    timestamp: Date.now()
-  });
-}
-
-window.addExpense = function () {
-  const person = document.getElementById('personSelect').value;
-  const item = document.getElementById('forInput').value.trim();
-  const amount = document.getElementById('amountInput').value.trim();
-  const itemErr = checkForWhat(item);
-  const amtErr = checkAmount(amount);
-
-  clearErr('forInput', 'forError');
-  clearErr('amountInput', 'amountError');
-
-  if (itemErr || amtErr) {
-    if (itemErr) setErr('forInput', 'forError', itemErr);
-    if (amtErr) setErr('amountInput', 'amountError', amtErr);
-    return;
-  }
-
-  addExpenseFirebase(person, item, amount)
-    .then(() => {
-      document.getElementById('forInput').value = '';
-      document.getElementById('amountInput').value = '';
-      showToast('✅ Expense added and synced');
-    })
-    .catch(err => {
-      console.error('Firestore add error', err);
-      showToast('Failed to add expense', 'error');
-    });
-};
-
-window.deleteExpenseFirestore = async function (id) {
-  try {
-    await deleteDoc(doc(db, 'expenses', id));
-    showToast('✅ Expense deleted');
-  } catch (err) {
-    console.error('delete error', err);
-    showToast('Delete failed', 'error');
-  }
-};
-
-window.resetAll = async function () {
-  if (!confirm('Delete ALL expenses? This cannot be undone.')) return;
-  const querySnap = await getDocs(collection(db, 'expenses'));
-  const batch = querySnap.docs.map(d => deleteDoc(doc(db, 'expenses', d.id)));
-  await Promise.all(batch);
-  showToast('↺ All expenses reset (Firestore)', 'success');
-};
-
-window.openMonthPicker = function () {
-  showToast('✅ Firestore sync enabled. Month picker is disabled in this mode.', 'info');
-};
-
-window.closeMonthPicker = function () {
-  const modal = document.getElementById('monthPickerModal');
-  if (modal) modal.classList.remove('open');
-};
-
-window.handlePickerOverlayClick = function (e) {
-  if (e.target === document.getElementById('monthPickerModal')) {
-    window.closeMonthPicker();
-  }
-};
-
-window.saveEdit = function () {
-  showToast('Edit mode is not available in this Firestore demo yet.', 'info');
-};
-
-window.openEdit = function () {
-  showToast('Edit mode is not available in this Firestore demo yet.', 'info');
-};
-
-function listenExpenses() {
-  const ref = collection(db, 'expenses');
-  onSnapshot(ref, snapshot => {
-    console.log('🔥 Firestore snapshot working');
-    expenses = [];
-    snapshot.forEach(d => {
-      const data = d.data();
-      expenses.push({ id: d.id, person: data.person || '', item: data.item || '', amount: Number(data.amount) || 0, timestamp: data.timestamp || 0 });
-    });
-    expenses.sort((a, b) => a.timestamp - b.timestamp);
-    updateUI();
-  }, err => {
-    console.error('Firestore snapshot error', err);
-    showToast('Firestore sync error', 'error');
-  });
-}
-
-function addExpense() { window.addExpense(); }
-
-window.onload = () => {
-  listenExpenses();
-};
 </script>
 </body>
 </html>
