@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <title>ExpSplit Pro</title>
+  <script type="module" src="APP.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0d9488">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+
+  <style>
+/* ══════════════════════════════════════════════════════
+   CSS Variables
+══════════════════════════════════════════════════════ */
+:root {
+  --bg:        #f0f4f8;
+  --surface:   #ffffff;
+  --surface2:  #f8fafc;
+  --border:    #e2e8f0;
+  --border2:   #cbd5e1;
+  --teal:      #0d9488;
+  --teal-lt:   #14b8a6;
+  --teal-pale: #ccfbf1;
+  --teal-dark: #0f766e;
+  --green:     #10b981;
+  --green-bg:  #d1fae5;
+  --red:       #ef4444;
+  --red-bg:    #fee2e2;
+  --amber:     #f59e0b;
+  --amber-bg:  #fef3c7;
+  --blue:      #3b82f6;
+  --blue-bg:   #dbeafe;
+  --text:      #0f172a;
+  --text2:     #334155;
+  --muted:     #64748b;
+  --muted2:    #94a3b8;
+  --font:      'Plus Jakarta Sans', system-ui, sans-serif;
+  --mono:      'JetBrains Mono', 'Courier New', monospace;
+  --r:         12px;
+  --r-sm:      8px;
+  --r-lg:      16px;
+  --sh-sm:     0 1px 3px rgba(0,0,0,0.06);
+  --sh:        0 4px 6px rgba(0,0,0,0.05);
+  --sh-md:     0 10px 15px rgba(0,0,0,0.07);
+  --sh-lg:     0 20px 25px rgba(0,0,0,0.08);
+  --ease:      0.2s ease;
+}
+
+/* ══════════════════════════════════════════════════════
+   Reset & Base — NO OVERFLOW
+══════════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html {
+  scroll-behavior: smooth;
+  overflow-x: hidden;   /* kill all horizontal scroll */
+}
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.6;
+  min-height: 100vh;
+  overflow-x: hidden;   /* belt & suspenders */
+  -webkit-text-size-adjust: 100%;
+}
+
+/* ══════════════════════════════════════════════════════
+   Layout Wrapper
+══════════════════════════════════════════════════════ */
+.wrapper {
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 5rem;
+}
+@media (max-width: 600px) {
+  .wrapper { padding: 0.75rem 0.5rem 4rem; }
+}
+
+/* ══════════════════════════════════════════════════════
+   Header
+══════════════════════════════════════════════════════ */
+.header {
+  text-align: center;
+  padding: 1.5rem 0 1.25rem;
+  animation: fadeDown 0.5s ease both;
+}
+.logo-row {
+  display: flex; align-items: center; justify-content: center;
+  gap: 0.6rem; margin-bottom: 0.4rem;
+}
+.logo-icon {
+  width: 40px; height: 40px; background: var(--teal);
+  border-radius: var(--r-sm); display: grid; place-items: center;
+  font-size: 1.2rem; box-shadow: var(--sh-sm); flex-shrink: 0;
+}
+.header h1 { font-size: clamp(1.5rem, 5vw, 2.4rem); font-weight: 800; letter-spacing: -0.5px; }
+.header h1 .brand { color: var(--teal); }
+.header p  { color: var(--muted); font-size: 0.82rem; font-weight: 500; }
+
+/* ══════════════════════════════════════════════════════
+   Firebase Status Bar
+══════════════════════════════════════════════════════ */
+.status-bar {
+  display: flex; align-items: center; gap: 0.5rem;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 0.5rem 0.9rem;
+  font-size: 0.75rem; font-weight: 600; color: var(--muted);
+  margin-bottom: 1rem; box-shadow: var(--sh-sm);
+  overflow: hidden;
+}
+.db-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--green); flex-shrink: 0;
+  animation: pulse 2s infinite;
+}
+
+/* ══════════════════════════════════════════════════════
+   Month Tabs
+══════════════════════════════════════════════════════ */
+.month-tabs {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: 0.4rem; justify-content: center;
+  margin-bottom: 0.9rem;
+  padding: 0 0.1rem;
+}
+.month-btn {
+  padding: 0.4rem 0.85rem; border-radius: 100px;
+  border: 1.5px solid var(--border2);
+  background: var(--surface); color: var(--muted);
+  font-family: var(--font); font-size: 0.78rem; font-weight: 600;
+  cursor: pointer; transition: all var(--ease);
+  white-space: nowrap; touch-action: manipulation;
+}
+.month-btn:hover, .month-btn.add-btn { border-color: var(--teal); color: var(--teal); background: var(--teal-pale); }
+.month-btn.active { background: var(--teal); border-color: var(--teal); color: #fff; box-shadow: 0 3px 10px rgba(13,148,136,0.3); }
+
+/* ══════════════════════════════════════════════════════
+   Member Chips — with absent styling
+══════════════════════════════════════════════════════ */
+.member-chips {
+  display: flex; flex-wrap: wrap; gap: 0.4rem;
+  justify-content: center; margin-bottom: 1rem;
+}
+.chip {
+  display: flex; align-items: center; gap: 0.35rem;
+  padding: 0.3rem 0.7rem 0.3rem 0.55rem;
+  border-radius: 100px; border: 1.5px solid var(--border2);
+  font-size: 0.78rem; font-weight: 600; cursor: pointer;
+  transition: all var(--ease); user-select: none;
+  touch-action: manipulation; white-space: nowrap;
+}
+.chip-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; transition: background var(--ease); }
+.chip-icon { font-size: 0.65rem; opacity: 0.8; }
+
+.chip.present { border-color: var(--teal); background: var(--teal-pale); color: var(--teal-dark); }
+.chip.present .chip-dot { background: var(--teal); }
+.chip.absent  { border-color: var(--border); background: var(--surface2); color: var(--muted2); opacity: 0.65; }
+.chip.absent  .chip-dot { background: var(--muted2); }
+/* Absent label gets strikethrough */
+.chip.absent  { text-decoration: line-through; }
+
+/* ══════════════════════════════════════════════════════
+   Stats Row
+══════════════════════════════════════════════════════ */
+.stats-row {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 0.6rem; margin-bottom: 1rem;
+}
+@media (max-width: 400px) {
+  .stats-row { grid-template-columns: 1fr 1fr; }
+  .stats-row .stat-card:last-child { grid-column: 1 / -1; }
+}
+.stat-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 0.85rem 0.9rem;
+  box-shadow: var(--sh-sm); position: relative; overflow: hidden;
+}
+.stat-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0;
+  height: 3px; border-radius: var(--r) var(--r) 0 0;
+}
+.stat-card.teal::before  { background: var(--teal); }
+.stat-card.green::before { background: var(--green); }
+.stat-card.amber::before { background: var(--amber); }
+.stat-label { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: var(--muted); margin-bottom: 0.25rem; }
+.stat-value { font-family: var(--mono); font-size: clamp(1rem, 3.5vw, 1.5rem); font-weight: 600; line-height: 1.2; word-break: break-all; }
+.stat-value.teal  { color: var(--teal); }
+.stat-value.green { color: var(--green); }
+.stat-value.amber { color: var(--amber); }
+
+/* ══════════════════════════════════════════════════════
+   Cards
+══════════════════════════════════════════════════════ */
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 1rem;
+  box-shadow: var(--sh-sm); margin-bottom: 0.75rem;
+  width: 100%;
+}
+.card-title {
+  display: flex; align-items: center; gap: 0.4rem;
+  font-size: 0.65rem; font-weight: 700; letter-spacing: 1.5px;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 0.9rem;
+}
+.title-bar { width: 3px; height: 13px; background: var(--teal); border-radius: 2px; flex-shrink: 0; }
+.title-bar.green { background: var(--green); }
+.title-bar.amber { background: var(--amber); }
+.title-bar.blue  { background: var(--blue); }
+
+/* ══════════════════════════════════════════════════════
+   Two Column (desktop only) → stacked mobile
+══════════════════════════════════════════════════════ */
+.grid-2 {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 0.75rem; margin-bottom: 0.75rem;
+}
+@media (max-width: 680px) { .grid-2 { grid-template-columns: 1fr; } }
+
+/* ══════════════════════════════════════════════════════
+   Form
+══════════════════════════════════════════════════════ */
+.form-group { margin-bottom: 0.8rem; }
+label {
+  display: block; font-size: 0.67rem; font-weight: 700;
+  letter-spacing: 0.5px; text-transform: uppercase;
+  color: var(--text2); margin-bottom: 0.3rem;
+}
+select, input[type="text"], input[type="number"] {
+  width: 100%; background: var(--surface2);
+  border: 1.5px solid var(--border); border-radius: var(--r-sm);
+  padding: 0.6rem 0.85rem; color: var(--text);
+  font-family: var(--font); font-size: 0.9rem; outline: none;
+  transition: border-color var(--ease), box-shadow var(--ease);
+  appearance: none; -webkit-appearance: none;
+  /* Prevent zoom on iOS */
+  font-size: 16px;
+}
+select {
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2364748b' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 0.9rem center; padding-right: 2.2rem;
+}
+select:focus, input:focus { border-color: var(--teal); background: var(--surface); box-shadow: 0 0 0 3px rgba(13,148,136,0.12); }
+input.err { border-color: var(--red) !important; box-shadow: 0 0 0 3px rgba(239,68,68,0.1) !important; animation: shake 0.35s ease; }
+.field-error { font-size: 0.7rem; color: var(--red); font-weight: 600; margin-top: 0.25rem; display: none; }
+.field-error.show { display: block; }
+.field-hint { font-size: 0.65rem; color: var(--muted2); margin-top: 0.2rem; font-style: italic; }
+input::placeholder { color: var(--muted2); }
+
+/* ══════════════════════════════════════════════════════
+   Buttons
+══════════════════════════════════════════════════════ */
+.btn {
+  width: 100%; padding: 0.65rem 1rem;
+  border: none; border-radius: var(--r-sm);
+  font-family: var(--font); font-size: 0.88rem; font-weight: 700;
+  cursor: pointer; transition: all var(--ease); letter-spacing: 0.3px;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.btn-primary { background: var(--teal); color: #fff; box-shadow: 0 3px 10px rgba(13,148,136,0.25); }
+.btn-primary:hover { background: var(--teal-dark); transform: translateY(-1px); }
+.btn-primary:active { transform: translateY(0); }
+.btn-danger { background: transparent; color: var(--red); border: 1.5px solid var(--red); margin-top: 0.5rem; }
+.btn-danger:hover { background: var(--red-bg); }
+.btn-report {
+  width: 100%; padding: 0.65rem 1rem; border: none; border-radius: var(--r-sm);
+  font-family: var(--font); font-size: 0.88rem; font-weight: 700; cursor: pointer;
+  background: linear-gradient(135deg, var(--blue), #6366f1); color: #fff;
+  box-shadow: 0 3px 10px rgba(59,130,246,0.3); transition: all var(--ease);
+  touch-action: manipulation;
+}
+.btn-report:hover { transform: translateY(-1px); box-shadow: 0 5px 14px rgba(59,130,246,0.4); }
+
+/* ══════════════════════════════════════════════════════
+   Table — ZERO OVERFLOW on mobile
+══════════════════════════════════════════════════════ */
+.table-wrap {
+  overflow-x: auto; border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  -webkit-overflow-scrolling: touch;
+  /* Clip to card bounds */
+  max-width: 100%;
+}
+table { width: 100%; border-collapse: collapse; font-size: 0.8rem; min-width: 300px; }
+thead th {
+  background: var(--surface2); color: var(--muted);
+  font-size: 0.6rem; font-weight: 700; letter-spacing: 0.8px;
+  text-transform: uppercase; padding: 0.55rem 0.7rem;
+  text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+tbody tr { border-bottom: 1px solid var(--border); transition: background var(--ease); animation: rowIn 0.25s ease both; }
+tbody tr:hover { background: #f8fafc; }
+tbody tr:last-child { border-bottom: none; }
+td { padding: 0.6rem 0.7rem; vertical-align: middle; }
+.td-num  { color: var(--muted2); font-size: 0.68rem; font-weight: 600; font-family: var(--mono); }
+.td-name { font-weight: 600; color: var(--teal-dark); white-space: nowrap; font-size: 0.78rem; }
+.td-for  {
+  display: inline-block; font-size: 0.7rem; font-weight: 600;
+  color: var(--blue); background: var(--blue-bg); border-radius: 100px;
+  padding: 0.1rem 0.5rem; white-space: nowrap;
+  max-width: 100px; overflow: hidden; text-overflow: ellipsis;
+}
+.td-amt { font-family: var(--mono); font-weight: 600; color: var(--green); text-align: right; white-space: nowrap; font-size: 0.82rem; }
+.action-btns { display: flex; gap: 0.2rem; justify-content: flex-end; }
+.icon-btn {
+  background: none; border: none; cursor: pointer;
+  padding: 0.25rem 0.35rem; border-radius: 6px;
+  font-size: 0.78rem; color: var(--muted2);
+  transition: all var(--ease); min-width: 30px; min-height: 30px;
+  display: flex; align-items: center; justify-content: center;
+  touch-action: manipulation;
+}
+.icon-btn.edit:hover { color: var(--amber); background: var(--amber-bg); }
+.icon-btn.del:hover  { color: var(--red);   background: var(--red-bg); }
+.empty-state { text-align: center; padding: 1.5rem 1rem; color: var(--muted); font-size: 0.8rem; }
+.empty-icon  { font-size: 1.4rem; margin-bottom: 0.3rem; opacity: 0.4; }
+
+/* ══════════════════════════════════════════════════════
+   Balance Cards — single column on mobile
+══════════════════════════════════════════════════════ */
+.balance-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.6rem;
+}
+@media (max-width: 600px) { .balance-grid { grid-template-columns: 1fr; } }
+
+.balance-card {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 0.9rem;
+  transition: all var(--ease);
+}
+.balance-card:hover { border-color: var(--teal-lt); background: var(--surface); box-shadow: var(--sh-sm); }
+
+.bc-header {
+  display: flex; align-items: center; gap: 0.5rem;
+  flex-wrap: wrap; margin-bottom: 0.5rem;
+}
+.avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 0.58rem;
+  font-weight: 800; flex-shrink: 0; letter-spacing: 0.5px;
+}
+.avatar.recv { background: var(--green-bg); color: var(--green); border: 2px solid var(--green); }
+.avatar.pay  { background: var(--red-bg);   color: var(--red);   border: 2px solid var(--red); }
+.avatar.even { background: var(--surface2); color: var(--muted); border: 2px solid var(--border2); }
+
+.bc-name  { font-size: 0.85rem; font-weight: 700; color: var(--text2); flex: 1; min-width: 0; }
+.bc-badge {
+  font-family: var(--mono); font-size: 0.72rem; font-weight: 700;
+  padding: 0.2rem 0.5rem; border-radius: 6px; white-space: nowrap;
+}
+.bc-badge.recv { color: var(--green); background: var(--green-bg); }
+.bc-badge.pay  { color: var(--red);   background: var(--red-bg); }
+.bc-badge.even { color: var(--muted); background: var(--border); }
+
+.bc-bar-wrap { height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; margin-bottom: 0.35rem; }
+.bc-bar { height: 100%; border-radius: 3px; transition: width 0.4s ease; min-width: 3px; }
+.bc-bar.recv { background: var(--green); }
+.bc-bar.pay  { background: var(--red); }
+
+.bc-sub { font-size: 0.65rem; color: var(--muted2); font-family: var(--mono); }
+
+/* ══════════════════════════════════════════════════════
+   Settlement
+══════════════════════════════════════════════════════ */
+.txn-list { display: flex; flex-direction: column; gap: 0.45rem; }
+.txn {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 0.6rem; flex-wrap: wrap; padding: 0.8rem 0.9rem;
+  background: var(--surface); border: 1.5px solid var(--border);
+  border-radius: var(--r-sm); transition: all var(--ease); box-shadow: var(--sh-sm);
+}
+.txn:hover { border-color: var(--teal); box-shadow: var(--sh); transform: translateX(2px); }
+.txn-left { display: flex; align-items: center; gap: 0.55rem; }
+.txn-info .txn-from { font-size: 0.78rem; color: var(--muted); }
+.txn-info .txn-from strong { color: var(--text); font-weight: 700; }
+.txn-info .txn-to { font-size: 0.74rem; color: var(--muted); }
+.txn-info .txn-to span { color: var(--teal-dark); font-weight: 700; }
+.txn-amount {
+  font-family: var(--mono); font-size: 0.95rem; font-weight: 700;
+  color: var(--teal); white-space: nowrap; padding: 0.22rem 0.6rem;
+  background: var(--teal-pale); border-radius: 100px;
+}
+.all-settled {
+  text-align: center; padding: 1.2rem; color: var(--green);
+  font-size: 0.88rem; font-weight: 600;
+  background: var(--green-bg); border: 1.5px solid var(--green); border-radius: var(--r);
+}
+.all-settled .icon { font-size: 1.4rem; margin-bottom: 0.3rem; }
+
+/* ══════════════════════════════════════════════════════
+   Chart
+══════════════════════════════════════════════════════ */
+.chart-container { position: relative; height: 240px; margin-top: 0.6rem; }
+
+/* ══════════════════════════════════════════════════════
+   Edit Modal
+══════════════════════════════════════════════════════ */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(15,23,42,0.55);
+  backdrop-filter: blur(4px); z-index: 500;
+  display: flex; align-items: center; justify-content: center;
+  padding: 1rem; opacity: 0; pointer-events: none; transition: opacity 0.2s ease;
+}
+.modal-overlay.open { opacity: 1; pointer-events: all; }
+.modal {
+  background: var(--surface); border: 1px solid var(--border2);
+  border-radius: var(--r-lg); padding: 1.5rem; width: 100%;
+  max-width: 430px; max-height: 90vh; overflow-y: auto;
+  box-shadow: var(--sh-lg);
+  transform: translateY(20px) scale(0.97);
+  transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1);
+}
+.modal-overlay.open .modal { transform: translateY(0) scale(1); }
+.modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+.modal-title { font-size: 1.05rem; font-weight: 800; color: var(--text); }
+.modal-title em { color: var(--teal); font-style: normal; }
+.modal-close {
+  background: none; border: none; color: var(--muted); cursor: pointer;
+  font-size: 1rem; padding: 0.25rem; border-radius: 6px; transition: all var(--ease);
+  min-width: 34px; min-height: 34px; display: flex; align-items: center; justify-content: center;
+}
+.modal-close:hover { color: var(--text); background: var(--surface2); }
+.modal-badge {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  font-size: 0.7rem; font-weight: 600; color: var(--amber);
+  background: var(--amber-bg); border-radius: 100px;
+  padding: 0.2rem 0.7rem; margin-bottom: 1rem;
+}
+.modal-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin-top: 1rem; }
+.btn-save {
+  background: var(--teal); color: #fff; font-family: var(--font);
+  font-weight: 700; font-size: 0.85rem; padding: 0.65rem; border: none;
+  border-radius: var(--r-sm); cursor: pointer; transition: all var(--ease);
+}
+.btn-save:hover { background: var(--teal-dark); }
+.btn-cancel {
+  background: transparent; color: var(--muted); font-family: var(--font);
+  font-weight: 700; font-size: 0.85rem; padding: 0.65rem;
+  border: 1.5px solid var(--border2); border-radius: var(--r-sm);
+  cursor: pointer; transition: all var(--ease);
+}
+.btn-cancel:hover { border-color: var(--text2); color: var(--text2); }
+
+/* ══════════════════════════════════════════════════════
+   Toast
+══════════════════════════════════════════════════════ */
+.toast {
+  position: fixed; bottom: 1.25rem; left: 50%;
+  transform: translateX(-50%) translateY(4rem);
+  background: var(--surface); border: 1.5px solid var(--border2);
+  color: var(--text); padding: 0.6rem 1.2rem; border-radius: 100px;
+  font-size: 0.78rem; font-weight: 600; opacity: 0;
+  transition: all 0.3s cubic-bezier(0.34,1.56,0.64,1);
+  z-index: 999; pointer-events: none; white-space: nowrap;
+  max-width: 90vw; overflow: hidden; text-overflow: ellipsis;
+  text-align: center; box-shadow: var(--sh-md);
+}
+.toast.show  { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.success { border-color: var(--green); }
+.toast.error   { border-color: var(--red); }
+.toast.info    { border-color: var(--teal); }
+
+/* ══════════════════════════════════════════════════════
+   Section spacing helper
+══════════════════════════════════════════════════════ */
+.section { margin-bottom: 0.75rem; }
+
+/* ══════════════════════════════════════════════════════
+   Absent note banner
+══════════════════════════════════════════════════════ */
+.absent-note {
+  background: var(--amber-bg); border: 1px solid var(--amber);
+  border-radius: var(--r-sm); padding: 0.5rem 0.8rem;
+  font-size: 0.75rem; color: #92400e; font-weight: 600;
+  margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.4rem;
+}
+
+/* ══════════════════════════════════════════════════════
+   Animations
+══════════════════════════════════════════════════════ */
+@keyframes fadeDown { from { opacity:0; transform:translateY(-14px); } to { opacity:1; transform:translateY(0); } }
+@keyframes fadeUp   { from { opacity:0; transform:translateY(10px);  } to { opacity:1; transform:translateY(0); } }
+@keyframes rowIn    { from { opacity:0; transform:translateX(-8px);  } to { opacity:1; transform:translateX(0); } }
+@keyframes shake    { 0%,100%{transform:translateX(0);} 20%,60%{transform:translateX(-4px);} 40%,80%{transform:translateX(4px);} }
+@keyframes pulse    { 0%,100%{opacity:1;} 50%{opacity:0.35;} }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+
+  <!-- Header -->
+  <header class="header">
+    <div class="logo-row">
+      <div class="logo-icon">🔥</div>
+      <h1>Exp<span class="brand">Split</span> Pro</h1>
+    </div>
+    <p>Room Expense Tracker · 5 Members · Live Sync</p>
+  </header>
+
+  <!-- Month Tabs -->
+  <div class="month-tabs" id="monthTabs">
+    <span style="color:var(--muted);font-size:.8rem">Loading months…</span>
+  </div>
+
+  <!-- Member Chips — tap to toggle presence -->
+  <div class="member-chips" id="memberChips"></div>
+
+  <!-- Stats -->
+  <div class="stats-row">
+    <div class="stat-card teal">
+      <div class="stat-label">Total Spent</div>
+      <div class="stat-value teal" id="totalDisplay">₹0</div>
+    </div>
+    <div class="stat-card green">
+      <div class="stat-label">Per Person</div>
+      <div class="stat-value green" id="shareDisplay">₹0</div>
+    </div>
+    <div class="stat-card amber">
+      <div class="stat-label">Settlements</div>
+      <div class="stat-value amber" id="txnCountDisplay">0</div>
+    </div>
+  </div>
+
+  <!-- Add Expense + Log -->
+  <div class="grid-2">
+
+    <!-- Add Expense Card -->
+    <div class="card">
+      <div class="card-title"><span class="title-bar"></span>Add Expense</div>
+      <div class="form-group">
+        <label for="personSelect">Paid by</label>
+        <select id="personSelect"></select>
+      </div>
+      <div class="form-group">
+        <label for="forInput">Spent on</label>
+        <input type="text" id="forInput" placeholder="Vegetables, Petrol, Dinner…" maxlength="50" autocomplete="off"/>
+        <div class="field-error" id="forError"></div>
+        <div class="field-hint">Describe what was bought</div>
+      </div>
+      <div class="form-group">
+        <label for="amountInput">Amount (₹)</label>
+        <input type="number" id="amountInput" placeholder="e.g. 1200" min="0.01" step="0.01"/>
+        <div class="field-error" id="amountError"></div>
+      </div>
+      <button class="btn btn-primary" onclick="addExpense()">🚀 Add &amp; Sync</button>
+      <button class="btn btn-danger"  onclick="resetAll()">↺ Clear This Month</button>
+    </div>
+
+    <!-- Expense Log Card -->
+    <div class="card">
+      <div class="card-title"><span class="title-bar blue"></span>Expense Log (Live)</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th><th>Person</th><th>Item</th>
+              <th style="text-align:right">₹</th><th style="text-align:right">Act</th>
+            </tr>
+          </thead>
+          <tbody id="expenseBody">
+            <tr><td colspan="5">
+              <div class="empty-state"><div class="empty-icon">🔥</div>Connecting…</div>
+            </td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /grid-2 -->
+
+  <!-- Balance -->
+  <div class="card section">
+    <div class="card-title">
+      <span class="title-bar green"></span>Balances
+      <small style="font-size:.6rem;color:var(--muted2);text-transform:none;letter-spacing:0;margin-left:.3rem">(absent members excluded)</small>
+    </div>
+    <div id="balanceSummary">
+      <div class="empty-state"><div class="empty-icon">⚖️</div>Loading…</div>
+    </div>
+  </div>
+
+  <!-- Settlement -->
+  <div class="card section">
+    <div class="card-title"><span class="title-bar amber"></span>Final Settlement</div>
+    <div id="settlementList">
+      <div class="empty-state"><div class="empty-icon">🤝</div>Syncing…</div>
+    </div>
+  </div>
+
+  <!-- Report -->
+  <div class="card section">
+    <div class="card-title"><span class="title-bar blue"></span>Download Report</div>
+    <p style="font-size:.78rem;color:var(--muted);margin-bottom:.8rem;line-height:1.6">
+      Downloads an HTML report with all expenses, balances &amp; settlements for the current month.
+    </p>
+    <button class="btn-report" onclick="downloadReport()">⬇ Download Report</button>
+  </div>
+
+  <!-- Chart -->
+  <div class="card section">
+    <div class="card-title"><span class="title-bar blue"></span>Who Paid What</div>
+    <div class="chart-container"><canvas id="expenseChart"></canvas></div>
+  </div>
+
+</div><!-- /wrapper -->
+
+<!-- Edit Modal -->
+<div class="modal-overlay" id="editModal" onclick="handleOverlayClick(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Edit <em>Expense</em></div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-badge">✏️ &nbsp;Editing row <span id="editRowNum">—</span></div>
+    <div class="form-group">
+      <label for="editPerson">Paid by</label>
+      <select id="editPerson"></select>
+    </div>
+    <div class="form-group">
+      <label for="editFor">Spent on</label>
+      <input type="text" id="editFor" placeholder="e.g. Vegetables…" maxlength="50" autocomplete="off"/>
+      <div class="field-error" id="editForError"></div>
+    </div>
+    <div class="form-group">
+      <label for="editAmount">Amount (₹)</label>
+      <input type="number" id="editAmount" placeholder="e.g. 1200" min="0.01" step="0.01"/>
+      <div class="field-error" id="editAmountError"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-save"   onclick="saveEdit()">🔥 Save &amp; Sync</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+</body>
+</html>
