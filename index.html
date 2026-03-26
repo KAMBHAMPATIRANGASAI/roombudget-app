@@ -8,7 +8,11 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0d9488">
+  <link rel="apple-touch-icon" href="icon.png">
   <style>
+
 /* ============================================================
    ExpSplit Pro — Embedded CSS
    ============================================================ */
@@ -707,6 +711,15 @@ function toggleMemberPresence(name) {
 
   renderMonthSelector(); renderMembersStrip(); render();
 })();
+
+// PWA Service Worker Registration
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js')
+      .then(reg => console.log('SW registered'))
+      .catch(err => console.log('SW failed'));
+  });
+}
 
 // ══════════════════════════════════════════════════════════════
 //  VALIDATION
