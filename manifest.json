@@ -1,0 +1,18 @@
+{
+  "name": "ExpSplit Pro",
+  "short_name": "ExpSplit", 
+  "description": "Room Expense Tracker & Settlement",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f0f4f8",
+  "theme_color": "#0d9488",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

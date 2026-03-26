@@ -1,8 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#0d9488">
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
   <title>ExpSplit Pro — Room Expense Tracker</title>
@@ -57,7 +55,64 @@ body {
   line-height: 1.6;
   min-height: 100vh;
 }
-.wrapper { max-width: 1100px; margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+.wrapper { 
+  max-width: 1100px; 
+  margin: 0 auto; 
+  padding: 1.5rem 1rem 4rem; /* Desktop */
+}
+
+/* Mobile consistent sizing - ALL sections same */
+@media (max-width: 768px) { 
+  * { box-sizing: border-box !important; }
+  
+  html, body { 
+    margin: 0; padding: 0; 
+    overflow-x: hidden;
+  }
+  
+  .wrapper { 
+    padding: 0.5rem 0 !important; 
+    margin: 0 !important;
+  }
+  
+  .card { 
+    padding: 0.75rem 0.3rem !important;
+    margin: 0 !important;
+    border-radius: 8px;
+  }
+  
+  .table-wrap { 
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  table {
+    font-size: 0.7rem !important;
+    min-width: 100% !important;
+    width: 100% !important;
+  }
+  
+  th, td {
+    padding: 0.4rem 0.3rem !important;
+    white-space: nowrap;
+  }
+  
+  .td-for {
+    max-width: 120px !important;
+    font-size: 0.68rem !important;
+  }
+  
+  .stats-row { grid-template-columns: 1fr !important; gap: 0.5rem !important; }
+  .grid-2 { grid-template-columns: 1fr !important; }
+  .balance-grid { grid-template-columns: 1fr !important; }
+  
+  .btn, input, select { 
+    font-size: 0.85rem !important; 
+    padding: 0.6rem 0.8rem !important;
+  }
+}
 
 /* HEADER */
 .header { text-align: center; padding: 2.5rem 0 2rem; animation: fadeDown 0.6s ease both; }
@@ -110,8 +165,50 @@ body {
 .stat-value.amber { color: var(--amber); }
 
 /* GRID */
-.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
-@media (max-width: 680px) { .grid-2 { grid-template-columns: 1fr; } }
+.grid-2 { 
+  display: grid; 
+  grid-template-columns: 1fr 1fr; 
+  gap: 1rem; 
+  margin-bottom: 1rem; 
+  align-items: stretch;
+}
+.grid-2 .card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
+}
+.grid-2 .table-wrap {
+  flex: 1 1 auto;
+  min-height: 240px;
+}
+@media (max-width: 768px) { 
+  .grid-2 { grid-template-columns: 1fr; }
+  .grid-2 .card { min-height: 330px; }
+  .wrapper { padding: 0.75rem 0.25rem 3rem; }
+  .table-wrap { 
+    margin: 0 -0.25rem; 
+    width: calc(100vw - 0.5rem);
+  }
+  table { 
+    font-size: 0.72rem; 
+    min-width: calc(100vw - 0.5rem);
+    padding-left: 0.25rem;
+  }
+  th, td { padding: 0.5rem 0.4rem; }
+  .card { 
+    padding: 0.9rem 0.5rem; 
+    margin: 0 -0.25rem; 
+  }
+  .action-btns .icon-btn { 
+    min-width: 28px; min-height: 28px; 
+    font-size: 0.75rem; padding: 0.2rem;
+  }
+}
+@media (max-width: 400px) { 
+  .card { padding: 1rem 0.75rem; }
+  .stats-row { grid-template-columns: 1fr; }
+}
 
 /* CARDS */
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; box-shadow: var(--shadow-sm); }
@@ -1184,13 +1281,6 @@ function showToast(msg, type = 'success') {
   t.className = `toast ${type} show`;
   clearTimeout(t._timer);
   t._timer = setTimeout(() => { t.className = 'toast'; }, 3400);
-}
-</script>
-<script>
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('service-worker.js')
-    .then(() => console.log("PWA Ready"))
-    .catch(err => console.log(err));
 }
 </script>
 </body>
