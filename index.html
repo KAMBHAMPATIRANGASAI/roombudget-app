@@ -894,7 +894,7 @@ function renderTable(expenses) {
       <td class="td-amt">₹${fmt(e.amount)}</td>
       <td><div class="action-btns">
         <button class="icon-btn edit" onclick="openEdit(${i})" title="Edit">✏️</button>
-        <button class="icon-btn del"  onclick="deleteExpense(${i})" title="Delete">🗑</button>
+        <button class="icon-btn del"  onclick="deleteExpense('${e.id}')" title="Delete">🗑</button>
       </div></td>
     </tr>`).join('');
 }

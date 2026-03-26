@@ -182,29 +182,19 @@ function validateEditForm() {
 }
 
 // ── Add Expense ─────────────────────────────────────────────────────
-function addExpense() {
-  if (!currentMonthId) { showToast('Please select or create a month first', 'error'); return; }
+async function addExpense() {
   clearErr('forInput', 'forError');
   clearErr('amountInput', 'amountError');
+
   if (!validateAddForm()) return;
 
-  const month   = getMonth();
-  const person  = document.getElementById('personSelect').value;
-  const forWhat = document.getElementById('forInput').value.trim();
-  const amount  = parseFloat(document.getElementById('amountInput').value);
-
-  async function addExpense() {
-  clearErr('forInput', 'forError');
-  clearErr('amountInput', 'amountError');
-  if (!validateAddForm()) return;
-
-  const person  = document.getElementById('personSelect').value;
-  const forWhat = document.getElementById('forInput').value.trim();
-  const amount  = parseFloat(document.getElementById('amountInput').value);
+  const person = document.getElementById('personSelect').value;
+  const item = document.getElementById('forInput').value.trim();
+  const amount = parseFloat(document.getElementById('amountInput').value);
 
   await addDoc(collection(db, "expenses"), {
     person,
-    forWhat,
+    item,
     amount,
     timestamp: Date.now()
   });
@@ -214,16 +204,13 @@ function addExpense() {
 
   showToast("🔥 Synced to Firebase", "success");
 }
-  render();
-  showToast(`✓ ₹${fmt(amount)} — ${forWhat} by ${person}`, 'success');
-}
 
 // ── Delete Expense ──────────────────────────────────────────────────
 function deleteExpense(i) {
   const month = getMonth();
   if (!month) return;
   const e = month.expenses[i];
-  if (!confirm(`Delete this expense?\n\n👤 ${e.person}\n🛒 ${e.forWhat}\n💰 ₹${fmt(e.amount)}`)) return;
+  if (!confirm(`Delete this expense?\n\n👤 ${e.person}\n🛒 ${e.item}\n💰 ₹${fmt(e.amount)}`)) return;
   month.expenses.splice(i, 1);
   saveData();
   render();
@@ -237,7 +224,7 @@ function openEdit(i) {
   editingIndex = i;
   const e = month.expenses[i];
   document.getElementById('editPerson').value = e.person;
-  document.getElementById('editFor').value    = e.forWhat;
+  document.getElementById('editFor').value    = e.item;
   document.getElementById('editAmount').value = e.amount;
   document.getElementById('editRowNum').textContent = `#${i + 1}`;
   clearErr('editFor',    'editForError');
@@ -259,11 +246,15 @@ function saveEdit() {
   const old        = month.expenses[editingIndex];
 
   const changes = [];
-  if (old.person  !== newPerson)  changes.push(`Person: ${old.person} → ${newPerson}`);
-  if (old.forWhat !== newForWhat) changes.push(`Item: ${old.forWhat} → ${newForWhat}`);
-  if (old.amount  !== newAmount)  changes.push(`Amount: ₹${fmt(old.amount)} → ₹${fmt(newAmount)}`);
+  if (old.person !== newPerson) changes.push(`Person: ${old.person} → ${newPerson}`);
+  if (old.item !== newForWhat) changes.push(`Item: ${old.item} → ${newForWhat}`);
+  if (old.amount !== newAmount) changes.push(`Amount: ₹${fmt(old.amount)} → ₹${fmt(newAmount)}`);
 
-  month.expenses[editingIndex] = { person: newPerson, forWhat: newForWhat, amount: newAmount };
+month.expenses[editingIndex] = {
+  person: newPerson,
+  item: newForWhat,
+  amount: newAmount
+};
 
   closeModal();
   saveData();
@@ -362,7 +353,7 @@ function renderTable(expenses) {
     <tr>
       <td class="td-num">${i + 1}</td>
       <td class="td-name">${e.person}</td>
-      <td><span class="td-for" title="${e.forWhat}">${e.forWhat}</span></td>
+      <td><span class="td-for" title="${e.item}">${e.item}</span></td>
       <td class="td-amt">₹${fmt(e.amount)}</td>
       <td>
         <div class="action-btns">
@@ -569,7 +560,7 @@ function downloadReport() {
         <tr>
           <td>${i + 1}</td>
           <td>${e.person}</td>
-          <td>${e.forWhat}</td>
+          <td>${e.item}</td>
           <td style="text-align:right;font-weight:600">₹${fmt(e.amount)}</td>
         </tr>`).join('')
     : `<tr><td colspan="4" style="text-align:center;color:#94a3b8">No expenses recorded</td></tr>`;
