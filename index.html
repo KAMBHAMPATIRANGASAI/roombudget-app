@@ -284,7 +284,13 @@ input::placeholder { color: var(--muted2); }
   /* Clip to card bounds */
   max-width: 100%;
 }
-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; min-width: 100%; /* No overflow */ }
+table { 
+  width: 100%; table-layout: fixed; border-collapse: collapse; 
+  font-size: 0.75rem; 
+}
+@media (max-width: 480px) {
+  table { font-size: 0.7rem; }
+}
 thead th {
   background: var(--surface2); color: var(--muted);
   font-size: 0.6rem; font-weight: 700; letter-spacing: 0.8px;
@@ -296,7 +302,59 @@ tbody tr:hover { background: #f8fafc; }
 tbody tr:last-child { border-bottom: none; }
 td { padding: 0.6rem 0.7rem; vertical-align: middle; }
 .td-num  { color: var(--muted2); font-size: 0.68rem; font-weight: 600; font-family: var(--mono); }
-.td-name { font-weight: 600; color: var(--teal-dark); white-space: nowrap; font-size: 0.78rem; }
+/* Person column */
+td:nth-child(2) {
+  color: var(--teal-dark);
+  font-weight: 600;
+}
+
+/* Fix amount column */
+th:nth-child(4),
+td:nth-child(4) {
+  width: 90px;
+  text-align: right;
+  padding-right: 10px;
+}
+
+/* Fix action column */
+th:nth-child(5),
+td:nth-child(5) {
+  width: 70px;
+  text-align: center;
+}
+/* Make # column very compact */
+th:nth-child(1),
+td:nth-child(1) {
+  width: 25px;          /* small width */
+  padding-right: 4px;   /* reduce gap */
+  text-align: center;
+}
+
+/* Reduce left padding of Person column */
+th:nth-child(2),
+td:nth-child(2) {
+  padding-left: 4px;    /* reduce space */
+}
+/* Increase Person name size */
+td:nth-child(2) {
+  font-size: 0.85rem;   /* increased from 0.75rem */
+}
+/* Center align all table headers */
+thead th {
+  text-align: center;
+}
+/* Center specific columns */
+th:nth-child(1), td:nth-child(1),
+th:nth-child(2), td:nth-child(2),
+th:nth-child(5), td:nth-child(5) {
+  text-align: center;
+}
+/* Space between icons */
+.action-btns {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+}
 .td-for  {
   display: inline-block; font-size: 0.7rem; font-weight: 600;
   color: var(--blue); background: var(--blue-bg); border-radius: 100px;
@@ -563,8 +621,9 @@ td { padding: 0.6rem 0.7rem; vertical-align: middle; }
         <table>
           <thead>
             <tr>
-              <th>#</th><th>Person</th><th>Item</th>
-              <th style="text-align:right">₹</th><th style="text-align:right">Act</th>
+              <th style="font-size:0.5rem">#</th><th style="font-size:0.5rem;padding-left:0.1rem;padding-right:0.3rem">Person</th><th style="font-size:0.5rem;padding-right:0.3rem">Item</th>
+              <th style="font-size:0.5rem;padding-right:0.2rem;text-align:right">₹</th><th style="padding:0.25rem 0.15rem;text-align:center">Act</th>
+
             </tr>
           </thead>
           <tbody id="expenseBody">
