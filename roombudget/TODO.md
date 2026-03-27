@@ -1,18 +1,10 @@
-# Firebase Firestore Migration - CLEANUP
+# GitHub Push Task
 
-**✅ Firebase LIVE:**
-- Firebase CDN + config ✓
-- addDoc() working ✓
-- onSnapshot listener ✓
-- No localStorage ✓
+## Steps to Complete:
+- [ ] 1. Stage project files
+- [ ] 2. Commit changes  
+- [ ] 3. Push to origin main
+- [ ] 4. Verify push (optional .gitignore)
 
-**🔄 Current Status:**
-- Duplicate MEMBERS fixed ✓
-- saveData/loadData removed ✓  
-- State: expenses[] Firestore only ✓
-
-**LIVE:** https://KAMBHAMPATIRANGASAI.github.io/roombudget-app
-
-**TEST:** Multi-tab sync working!
-
-
+**Repo:** https://github.com/KAMBHAMPATIRANGASAI/roombudget-app.git
+**Branch:** main
