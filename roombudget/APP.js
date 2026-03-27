@@ -39,6 +39,13 @@ const UPI_IDS = {
   "Vinod":     "vinodkumar996609@axl"
 };
 
+// ── Phone Numbers (for UPI fallback) ───────────────────────────────
+const PHONE_NUMBERS = {
+  "Ranga Sai": "9502493816",
+  "Naveen":    "8187849730"
+  // Add remaining: Shekar, Mahesh, Vinod
+};
+
 // ── State ──────────────────────────────────────────────────────────
 let expenses       = [];
 let payments       = [];
@@ -90,6 +97,11 @@ function buildUpiLink(toName, amount, note) {
     cu: 'INR',
     tn: note || `ExpSplit payment to ${toName}`
   });
+  
+  // Add phone number if available (improves success rate)
+  const phone = PHONE_NUMBERS[toName];
+  if (phone) params.append('pl', phone);
+  
   return `upi://pay?${params.toString()}`;
 }
 
