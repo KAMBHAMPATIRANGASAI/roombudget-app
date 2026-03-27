@@ -1,8 +1,8 @@
 # GitHub Push Task
 
 ## Steps to Complete:
-- [ ] 1. Stage project files
-- [ ] 2. Commit changes  
+- [✅] 1. Stage project files
+- [✅] 2. Commit changes  
 - [ ] 3. Push to origin main
 - [ ] 4. Verify push (optional .gitignore)
 
