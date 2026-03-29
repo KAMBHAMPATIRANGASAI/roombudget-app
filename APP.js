@@ -34,6 +34,12 @@ let editingId     = null;
 let chart         = null;
 let unsubExpenses = null;
 
+// ── Voice Assistant State ─────────────────────────────────────────
+let recognition  = null;
+let synthesis    = null;
+let voiceState   = null;  // null, 'add1-who', 'add2-item', 'add3-amount'
+let voiceTimeout = null;
+
 // ── Helpers ────────────────────────────────────────────────────────
 function presentMembers() {
   if (!currentMonth) return [...ALL_MEMBERS];
@@ -77,6 +83,8 @@ async function saveConfig() {
     renderMemberChips();
     subscribeExpenses();
   }
+
+  initVoice();  // 🔥 New: Voice Assistant
 
   ['forInput','amountInput'].forEach(id =>
     document.getElementById(id)?.addEventListener('keydown', e => { if (e.key==='Enter') addExpense(); }));
@@ -475,3 +483,265 @@ window.downloadReport     = downloadReport;
 window.selectMonth        = selectMonth;
 window.createCurrentMonth = createCurrentMonth;
 window.toggleMember       = toggleMember;
+
+// ── VOICE ASSISTANT FUNCTIONS ─────────────────────────────────────
+
+// Vibration feedback (mobile)
+function vibrate(pattern = [100]) {
+  if ('vibrate' in navigator) navigator.vibrate(pattern);
+}
+
+// Text-to-Speech + Visual feedback
+function speak(text) {
+  if (!synthesis) return;
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = 'en-IN';
+  utterance.rate = 1.1;  // Slightly faster for mobile
+  utterance.pitch = 1.0;
+  utterance.volume = 1.0;
+  
+  // Show visual toast
+  const toast = document.getElementById('voiceResponse');
+  toast.textContent = text;
+  toast.className = 'voice-toast show';
+  setTimeout(() => toast.classList.remove('show'), 4000);
+  
+  synthesis.speak(utterance);
+}
+
+// Init Speech APIs
+function initVoice() {
+  // SpeechSynthesis
+  synthesis = window.speechSynthesis;
+  
+  // SpeechRecognition (webkit fallback)
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    showToast('Voice not supported, please type', 'error');
+    return;
+  }
+  
+  recognition = new SpeechRecognition();
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  recognition.lang = 'en-IN';
+  
+  recognition.onstart = () => {
+    document.getElementById('voiceBtn').classList.add('listening');
+    vibrate([100, 50, 100]);
+    showToast('Listening...', 'info');
+  };
+  
+  recognition.onresult = (event) => {
+    const text = event.results[0][0].transcript.toLowerCase().trim();
+    handleVoiceCommand(text);
+  };
+  
+  recognition.onerror = (event) => {
+    let msg = 'Voice error';
+    if (event.error === 'not-allowed') msg = 'Mic access denied';
+    else if (event.error === 'no-speech') msg = 'No speech detected';
+    else if (event.error === 'network') msg = 'Network issue';
+    stopListening();
+    speak(msg);
+    showToast(msg, 'error');
+  };
+  
+  recognition.onend = () => stopListening();
+  
+  // Bind button
+  document.getElementById('voiceBtn').onclick = startListening;
+}
+
+// Start listening
+function startListening() {
+  stopListening();  // Ensure clean state
+  
+  if (synthesis.speaking) {
+    synthesis.cancel();
+    vibrate([200]);
+    setTimeout(() => recognition.start(), 500);
+    return;
+  }
+  
+  // Request permission first time
+  if (!recognition) initVoice();
+  recognition.start();
+}
+
+// Continuous listening for conversation
+function autoListen() {
+  if (!voiceState || !recognition) return;
+  if (synthesis.speaking) {
+    return setTimeout(autoListen, 300);
+  }
+  setTimeout(() => {
+    document.getElementById('voiceBtn').classList.add('listening');
+    recognition.start();
+  }, 400);  // Small delay after TTS
+}
+
+// Stop listening
+function stopListening() {
+  document.getElementById('voiceBtn')?.classList.remove('listening');
+  if (recognition) recognition.stop();
+  if (voiceTimeout) {
+    clearTimeout(voiceTimeout);
+    voiceTimeout = null;
+  }
+}
+
+// Reset conversation state (idle timeout)
+function resetVoiceState() {
+  voiceState = null;
+  stopListening();
+}
+
+// ── Voice Command Dispatcher ──────────────────────────────────────
+function handleVoiceCommand(text) {
+  // Reset timeout
+  if (voiceTimeout) clearTimeout(voiceTimeout);
+  voiceTimeout = setTimeout(resetVoiceState, 10000);  // 10s idle reset
+  
+  // Normalize text
+  text = text.toLowerCase().trim();
+  
+  console.log('Voice:', text, 'State:', voiceState);  // Debug
+  
+  // Conversation handling (add expense)
+  if (voiceState) {
+    handleVoiceConversation(text);
+    return;
+  }
+  
+  // Query handling
+  if (text.includes('total expense') || text.includes('total spent')) {
+    handleQueryTotal();
+  } else if (text.includes('top spender') || text.includes('max paid')) {
+    handleQueryTopSpender();
+  } else if (text.includes('who should pay') || text.includes('settlement') || text.includes('pay')) {
+    handleQuerySettle();
+  } else if (text.includes('add expense') || text.includes('new expense')) {
+    handleAddStart();
+  } else {
+    speak("Try: total expense, top spender, who should pay, or add expense");
+  }
+  
+  if (!voiceState) stopListening();
+}
+
+// ── QUERY HANDLERS (using existing data/functions) ────────────────
+
+function handleQueryTotal() {
+  const total = expenses.reduce((s, e) => s + e.amount, 0);
+  speak(`Total expense: rupees ${fmt(total)}`);
+}
+
+function handleQueryTopSpender() {
+  const present = presentMembers();
+  if (!present.length) { speak("No members present"); return; }
+  const share = expenses.reduce((s, e) => s + e.amount, 0) / present.length;
+  const balances = calcBalances(present, share);
+  const top = balances.reduce((max, b) => b.paid > max.paid ? b : max, {paid:0});
+  speak(`${top.name} spent most: rupees ${fmt(top.paid)}`);
+}
+
+function handleQueryOwes() {
+  const present = presentMembers();
+  if (!present.length) { speak("No members present"); return; }
+  const total = expenses.reduce((s, e) => s + e.amount, 0);
+  const share = total / present.length;
+  const balances = calcBalances(present, share);
+  
+  let summary = [];
+  balances.forEach(b => {
+    if (b.balance > 0.01) summary.push(`${b.name} gets rupees ${fmt(b.balance)}`);
+    else if (b.balance < -0.01) summary.push(`${b.name} pays rupees ${fmt(Math.abs(b.balance))}`);
+  });
+  speak(summary.length ? summary[0] : "All balanced");  // Short: first item
+}
+
+function handleQuerySettle() {
+  const present = presentMembers();
+  if (!present.length || !expenses.length) { 
+    speak("All settled"); 
+    return; 
+  }
+  const share = expenses.reduce((s, e) => s + e.amount, 0) / present.length;
+  const balances = calcBalances(present, share);
+  const txns = calcSettlement(balances);
+  
+  if (!txns.length) {
+    speak("All settled");
+  } else {
+    // Full settlement: "A pays B ₹X, C pays D ₹Y"
+    const summary = txns.map(t => `${t.from} pays ${t.to} rupees ${fmt(t.amount)}`).join('. ');
+    speak(summary || "All settled");
+  }
+}
+
+// ── ADD EXPENSE CONVERSATION (3-step) ────────────────────────────
+
+function handleVoiceConversation(text) {
+  switch (voiceState) {
+    case 'add1-who':
+      handleAddWho(text);
+      break;
+    case 'add2-item':
+      handleAddItem(text);
+      break;
+    case 'add3-amount':
+      handleAddAmount(text);
+      break;
+  }
+}
+
+function handleAddStart() {
+  voiceState = 'add1-who';
+  speak("Who paid?");
+  autoListen();
+}
+
+function handleAddWho(text) {
+  const present = presentMembers();
+  const who = present.find(p => 
+    text.includes(p.toLowerCase()) || 
+    text.includes(p.split(' ')[0].toLowerCase())
+  ) || present[0];  // Default to first
+  
+  document.getElementById('personSelect').value = who;
+  voiceState = 'add2-item';
+  speak(`Okay, ${who}. What item?`);
+  autoListen();  // Continuous
+}
+
+function handleAddItem(text) {
+  // Clean item text (remove numbers, trim)
+  let item = text.replace(/\d/g, '').trim().replace(/\s+/g, ' ').substring(0, 50);
+  if (item.length < 2) item = 'Item';
+  
+  document.getElementById('forInput').value = item;
+  voiceState = 'add3-amount';
+  speak('How much amount?');
+  autoListen();  // Continuous
+}
+
+function handleAddAmount(text) {
+  // Extract number from text
+  const numMatch = text.match(/(\d+(?:\.\d{0,2})?)/);
+  const amount = numMatch ? parseFloat(numMatch[1]) : 0;
+  
+  if (amount > 0 && amount < 100000) {
+    document.getElementById('amountInput').value = amount;
+    
+    // Auto-submit!
+    setTimeout(addExpense, 500);  // Brief pause for UX
+    
+    speak("Expense added successfully");
+    resetVoiceState();
+  } else {
+    speak("Say a valid amount like two hundred fifty");
+    voiceState = 'add3-amount';  // Retry
+    autoListen();  // Retry listen
+  }
+}
