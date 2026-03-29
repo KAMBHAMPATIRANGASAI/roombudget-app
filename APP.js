@@ -502,16 +502,26 @@ function speak(text) {
     utterance.pitch = 1.0;
     utterance.volume = 1.0;
     
-    // Show visual toast briefly when the phrase begins speaking
+    // Show visual toast when the phrase begins speaking
     utterance.onstart = () => {
       const toast = document.getElementById('voiceResponse');
       toast.textContent = text;
       toast.className = 'voice-toast show';
-      clearTimeout(toast._timer);
-      toast._timer = setTimeout(() => toast.classList.remove('show'), 4000);
+      if (toast._timer) {
+        clearTimeout(toast._timer);
+        toast._timer = null;
+      }
     };
-    utterance.onend = resolve;
-    utterance.onerror = resolve;
+    utterance.onend = () => {
+      const toast = document.getElementById('voiceResponse');
+      toast.classList.remove('show');
+      resolve();
+    };
+    utterance.onerror = () => {
+      const toast = document.getElementById('voiceResponse');
+      toast.classList.remove('show');
+      resolve();
+    };
     synthesis.speak(utterance);
   });
 }
