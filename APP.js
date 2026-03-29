@@ -39,6 +39,7 @@ let recognition  = null;
 let synthesis    = null;
 let voiceState   = null;  // null, 'add1-who', 'add2-item', 'add3-amount'
 let voiceTimeout = null;
+let voiceWelcomeShown = false;
 
 // ── Helpers ────────────────────────────────────────────────────────
 function presentMembers() {
@@ -493,20 +494,26 @@ function vibrate(pattern = [100]) {
 
 // Text-to-Speech + Visual feedback
 function speak(text) {
-  if (!synthesis) return;
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = 'en-IN';
-  utterance.rate = 1.1;  // Slightly faster for mobile
-  utterance.pitch = 1.0;
-  utterance.volume = 1.0;
-  
-  // Show visual toast
-  const toast = document.getElementById('voiceResponse');
-  toast.textContent = text;
-  toast.className = 'voice-toast show';
-  setTimeout(() => toast.classList.remove('show'), 4000);
-  
-  synthesis.speak(utterance);
+  if (!synthesis) return Promise.resolve();
+  return new Promise(resolve => {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-IN';
+    utterance.rate = 0.85;  // slower, easier to follow
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+    
+    // Show visual toast briefly when the phrase begins speaking
+    utterance.onstart = () => {
+      const toast = document.getElementById('voiceResponse');
+      toast.textContent = text;
+      toast.className = 'voice-toast show';
+      clearTimeout(toast._timer);
+      toast._timer = setTimeout(() => toast.classList.remove('show'), 4000);
+    };
+    utterance.onend = resolve;
+    utterance.onerror = resolve;
+    synthesis.speak(utterance);
+  });
 }
 
 // Init Speech APIs
@@ -557,6 +564,18 @@ function initVoice() {
 function startListening() {
   stopListening();  // Ensure clean state
   
+  if (!recognition) initVoice();
+  if (!voiceState) {
+    voiceState = 'querySession';
+    const prompt = voiceWelcomeShown
+      ? 'Try: total expense, top spender, who should pay, or add expense'
+      : 'Haii Buddy, Try: total expense, top spender, who should pay, or add expense';
+    voiceWelcomeShown = true;
+    speak(prompt);
+    autoListen();
+    return;
+  }
+  
   if (synthesis.speaking) {
     synthesis.cancel();
     vibrate([200]);
@@ -564,8 +583,6 @@ function startListening() {
     return;
   }
   
-  // Request permission first time
-  if (!recognition) initVoice();
   recognition.start();
 }
 
@@ -578,7 +595,7 @@ function autoListen() {
   setTimeout(() => {
     document.getElementById('voiceBtn').classList.add('listening');
     recognition.start();
-  }, 400);  // Small delay after TTS
+  }, 2000);  // Wait 2s after response before listening
 }
 
 // Stop listening
@@ -609,8 +626,13 @@ function handleVoiceCommand(text) {
   console.log('Voice:', text, 'State:', voiceState);  // Debug
   
   // Conversation handling (add expense)
-  if (voiceState) {
+  if (voiceState && voiceState.startsWith('add')) {
     handleVoiceConversation(text);
+    return;
+  }
+  
+  if (voiceState === 'querySession' || voiceState === 'followup') {
+    handleGeneralVoiceQuery(text);
     return;
   }
   
@@ -634,16 +656,16 @@ function handleVoiceCommand(text) {
 
 function handleQueryTotal() {
   const total = expenses.reduce((s, e) => s + e.amount, 0);
-  speak(`Total expense: rupees ${fmt(total)}`);
+  return speak(`Total expense: rupees ${fmt(total)}`);
 }
 
 function handleQueryTopSpender() {
   const present = presentMembers();
-  if (!present.length) { speak("No members present"); return; }
+  if (!present.length) { return speak("No members present"); }
   const share = expenses.reduce((s, e) => s + e.amount, 0) / present.length;
   const balances = calcBalances(present, share);
   const top = balances.reduce((max, b) => b.paid > max.paid ? b : max, {paid:0});
-  speak(`${top.name} spent most: rupees ${fmt(top.paid)}`);
+  return speak(`${top.name} spent most: rupees ${fmt(top.paid)}`);
 }
 
 function handleQueryOwes() {
@@ -664,20 +686,50 @@ function handleQueryOwes() {
 function handleQuerySettle() {
   const present = presentMembers();
   if (!present.length || !expenses.length) { 
-    speak("All settled"); 
-    return; 
+    return speak("All settled"); 
   }
   const share = expenses.reduce((s, e) => s + e.amount, 0) / present.length;
   const balances = calcBalances(present, share);
   const txns = calcSettlement(balances);
   
   if (!txns.length) {
-    speak("All settled");
-  } else {
-    // Full settlement: "A pays B ₹X, C pays D ₹Y"
-    const summary = txns.map(t => `${t.from} pays ${t.to} rupees ${fmt(t.amount)}`).join('. ');
-    speak(summary || "All settled");
+    return speak("All settled");
   }
+  const summary = txns.map(t => `${t.from} pays ${t.to} rupees ${fmt(t.amount)}`).join('. ');
+  return speak(summary || "All settled");
+}
+
+function handleGeneralVoiceQuery(text) {
+  const lower = text.toLowerCase().trim();
+  if (lower === 'no' || lower === 'no question' || lower === 'no questions' || lower === 'nothing') {
+    speak('Okay');
+    resetVoiceState();
+    return;
+  }
+  if (lower.includes('add expense') || lower.includes('new expense')) {
+    handleAddStart();
+    return;
+  }
+  if (lower.includes('total expense') || lower.includes('total spent')) {
+    handleQueryTotal().then(askFollowUp);
+    return;
+  }
+  if (lower.includes('top spender') || lower.includes('max paid')) {
+    handleQueryTopSpender().then(askFollowUp);
+    return;
+  }
+  if (lower.includes('who should pay') || lower.includes('settlement') || lower.includes('pay')) {
+    handleQuerySettle().then(askFollowUp);
+    return;
+  }
+  speak('Try: total expense, top spender, who should pay, or add expense');
+  autoListen();
+}
+
+function askFollowUp() {
+  voiceState = 'followup';
+  speak('Any other question?');
+  autoListen();
 }
 
 // ── ADD EXPENSE CONVERSATION (3-step) ────────────────────────────
