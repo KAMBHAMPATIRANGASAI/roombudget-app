@@ -5,8 +5,8 @@
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import {
-  getFirestore, collection, addDoc, onSnapshot,
-  deleteDoc, doc, updateDoc, query, orderBy, setDoc, getDoc
+  getFirestore, collection, addDoc, onSnapshot, getDocs, limit,
+  deleteDoc, doc, updateDoc, query, orderBy, setDoc, getDoc, collectionGroup
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
 // ── Firebase Config ────────────────────────────────────────────────
@@ -56,16 +56,69 @@ function monthLabel(id) {
 }
 
 // ── Firestore: Config doc ──────────────────────────────────────────
+async function discoverMonths() {
+  const discovered = new Set();
+  
+  // Scan last 24 months (efficient client-side)
+  const now = new Date();
+  for (let i = 0; i < 24; i++) {
+    const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const id = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    
+    // Quick check: try get first expense
+    try {
+      const q = query(collection(db, 'months', id, 'expenses'), limit(1));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        discovered.add(id);
+        console.log(`Found data: ${id}`);
+      }
+    } catch (e) {
+      // Month doesn't exist → skip
+    }
+  }
+  
+  const newMonths = Array.from(discovered).sort().reverse().map(id => ({
+    id, name: monthLabel(id)
+  }));
+  
+  console.log(`Discovered ${newMonths.length} months with data:`, newMonths.map(m => m.id));
+  return newMonths;
+}
+
 async function loadConfig() {
   try {
+    // 1. Load existing config
     const snap = await getDoc(doc(db, 'config', 'main'));
     if (snap.exists()) {
-      const d      = snap.data();
-      months       = d.months       || [];
-      presentMap   = d.presentMap   || {};
+      const d = snap.data();
+      months = d.months || [];
+      presentMap = d.presentMap || {};
       currentMonth = d.currentMonth || null;
     }
-  } catch (e) { console.error('loadConfig:', e); }
+    
+    // 2. Discover ALL existing months (even if not in config)
+    const discovered = await discoverMonths();
+    
+    // 3. MERGE: Add missing discovered months
+    const existingIds = months.map(m => m.id);
+    discovered.forEach(dm => {
+      if (!existingIds.includes(dm.id)) {
+        months.unshift(dm);  // Add new at top
+        if (!presentMap[dm.id]) {
+          presentMap[dm.id] = [...ALL_MEMBERS];
+        }
+      }
+    });
+    
+    // 4. Sort months newest first
+    months.sort((a, b) => b.id.localeCompare(a.id));
+    
+    console.log('Merged months:', months.length, 'Config months:', months.map(m => m.id));
+    
+  } catch (e) {
+    console.error('loadConfig:', e);
+  }
 }
 async function saveConfig() {
   try {
@@ -101,9 +154,15 @@ async function saveConfig() {
 async function createCurrentMonth() {
   const id   = monthIdNow();
   const name = monthLabel(id);
-  if (months.find(m => m.id === id)) { showToast(`${name} already exists`, 'error'); return; }
-  months.push({ id, name });
-  if (!presentMap[id]) presentMap[id] = [...ALL_MEMBERS];
+  
+  // Check if already exists (including discovered)
+  if (months.find(m => m.id === id)) { 
+    selectMonth(id); 
+    return; 
+  }
+  
+  months.unshift({ id, name });
+  presentMap[id] = [...ALL_MEMBERS];
   currentMonth = id;
   await saveConfig();
   renderMonthTabs();
@@ -114,11 +173,24 @@ async function createCurrentMonth() {
 
 async function selectMonth(id) {
   if (currentMonth === id) return;
+  
+  // Ensure month exists in list
+  let monthExists = months.find(m => m.id === id);
+  if (!monthExists) {
+    // Auto-add discovered month
+    monthExists = { id, name: monthLabel(id) };
+    months.unshift(monthExists);
+    if (!presentMap[id]) presentMap[id] = [...ALL_MEMBERS];
+    console.log(`Auto-added month: ${id}`);
+  }
+  
   currentMonth = id;
   await saveConfig();
   renderMonthTabs();
   renderMemberChips();
   subscribeExpenses();
+  
+  showToast(`Switched to ${monthExists.name}`, 'info');
 }
 
 // ── Member Presence Toggle ─────────────────────────────────────────
