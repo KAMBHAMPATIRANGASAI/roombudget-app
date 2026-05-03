@@ -46,7 +46,11 @@ export async function registerUser(email, password) {
       window.location.href = 'index.html';
     }, 1000);
   } catch (error) {
-    showMessage(error.message || 'Registration failed.', 'error');
+    let errorMessage = error.message || 'Registration failed.';
+    if (error.code === 'auth/configuration-not-found') {
+      errorMessage = 'Firebase not configured. Please check FIREBASE_SETUP.md for setup instructions.';
+    }
+    showMessage(errorMessage, 'error');
   }
 }
 
@@ -60,7 +64,11 @@ export async function loginUser(email, password) {
       window.location.href = 'index.html';
     }, 1000);
   } catch (error) {
-    showMessage(error.message || 'Login failed.', 'error');
+    let errorMessage = error.message || 'Login failed.';
+    if (error.code === 'auth/configuration-not-found') {
+      errorMessage = 'Firebase not configured. Please check FIREBASE_SETUP.md for setup instructions.';
+    }
+    showMessage(errorMessage, 'error');
   }
 }
 
