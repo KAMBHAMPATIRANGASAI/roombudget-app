@@ -3,9 +3,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import { getAuth } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, collection, addDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-// 🔥 Your Firebase config (REAL VALUES)
+// 🔥 Your Firebase config
 const firebaseConfig = {
-  apiKey: "AIzaSy...",  // keep your actual key here
+  apiKey: "AIzaSyC7yj0KCcpyb1lZZnzp4LKfZBIeYKKvXOc",
   authDomain: "roombudget-app.firebaseapp.com",
   projectId: "roombudget-app",
   storageBucket: "roombudget-app.firebasestorage.app",
@@ -19,6 +19,13 @@ const app = initializeApp(firebaseConfig);
 // 🔥 Initialize services
 const auth = getAuth(app);
 const db = getFirestore(app);
+
+console.log('Firebase initialized');
+console.log('Firebase project:', firebaseConfig.projectId);
+console.log('Firebase auth domain:', firebaseConfig.authDomain);
+console.log('Firebase app name:', app.name);
+console.log('Auth service initialized:', auth !== undefined);
+console.log('Firestore service initialized:', db !== undefined);
 
 // 🔥 Export everything
 export { auth, db, collection, addDoc, onSnapshot };

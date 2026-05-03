@@ -39,16 +39,20 @@ function validateAuthForm(email, password) {
 export async function registerUser(email, password) {
   if (!validateAuthForm(email, password)) return;
 
+  console.log('Attempting registration for', email);
+
   try {
-    await createUserWithEmailAndPassword(auth, email, password);
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    console.log('Registration success', userCredential.user);
     showMessage('Registration successful. Redirecting...', 'success');
     setTimeout(() => {
       window.location.href = 'index.html';
     }, 1000);
   } catch (error) {
+    console.error('Registration error', error);
     let errorMessage = error.message || 'Registration failed.';
     if (error.code === 'auth/configuration-not-found') {
-      errorMessage = 'Firebase not configured. Please check FIREBASE_SETUP.md for setup instructions.';
+      errorMessage = 'Firebase is not configured correctly. Check firebase-config.js.';
     }
     showMessage(errorMessage, 'error');
   }
@@ -57,16 +61,20 @@ export async function registerUser(email, password) {
 export async function loginUser(email, password) {
   if (!validateAuthForm(email, password)) return;
 
+  console.log('Attempting login for', email);
+
   try {
-    await signInWithEmailAndPassword(auth, email, password);
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    console.log('Login success', userCredential.user);
     showMessage('Login successful. Redirecting...', 'success');
     setTimeout(() => {
       window.location.href = 'index.html';
     }, 1000);
   } catch (error) {
+    console.error('Login error', error);
     let errorMessage = error.message || 'Login failed.';
     if (error.code === 'auth/configuration-not-found') {
-      errorMessage = 'Firebase not configured. Please check FIREBASE_SETUP.md for setup instructions.';
+      errorMessage = 'Firebase is not configured correctly. Check firebase-config.js.';
     }
     showMessage(errorMessage, 'error');
   }
@@ -78,6 +86,7 @@ export async function logoutUser() {
     alert('You have been logged out.');
     window.location.href = 'login.html';
   } catch (error) {
+    console.error('Logout error', error);
     alert('Logout failed: ' + (error.message || 'Unknown error'));
   }
 }
