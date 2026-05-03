@@ -6,6 +6,9 @@ import {
   onAuthStateChanged
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 
+console.log('Auth loaded');
+console.log('Auth object:', auth);
+
 function showMessage(message, type = 'info') {
   const status = document.getElementById('statusMessage');
   if (!status) {
@@ -38,6 +41,10 @@ function validateAuthForm(email, password) {
 
 export async function registerUser(email, password) {
   if (!validateAuthForm(email, password)) return;
+  if (!auth) {
+    showMessage('Firebase auth is not initialized. Check firebase-config.js.', 'error');
+    return;
+  }
 
   console.log('Attempting registration for', email);
 
@@ -60,6 +67,10 @@ export async function registerUser(email, password) {
 
 export async function loginUser(email, password) {
   if (!validateAuthForm(email, password)) return;
+  if (!auth) {
+    showMessage('Firebase auth is not initialized. Check firebase-config.js.', 'error');
+    return;
+  }
 
   console.log('Attempting login for', email);
 

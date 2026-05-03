@@ -4,16 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
   <title>ExpSplit Pro</title>
-  <script type="module">
-    import { auth } from './firebase-config.js';
-    import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
-
-    onAuthStateChanged(auth, user => {
-      if (!user) {
-        window.location.href = 'login.html';
-      }
-    });
-  </script>
+  <script type="module" src="auth.js"></script>
   <script type="module" src="APP.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
