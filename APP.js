@@ -3,24 +3,11 @@
  * Firestore real-time sync + per-month member presence
  */
 
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import { db } from './firebase-config.js';
 import {
-  getFirestore, collection, addDoc, onSnapshot, getDocs, limit,
+  collection, addDoc, onSnapshot, getDocs, limit,
   deleteDoc, doc, updateDoc, query, orderBy, setDoc, getDoc, collectionGroup
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
-
-// ── Firebase Config ────────────────────────────────────────────────
-const firebaseConfig = {
-  apiKey:            "AIzaSyC7yj0KCcpyb1lZZnzp4LKfZBIeYKKvXOc",
-  authDomain:        "roombudget-app.firebaseapp.com",
-  projectId:         "roombudget-app",
-  storageBucket:     "roombudget-app.firebasestorage.app",
-  messagingSenderId: "1056177026184",
-  appId:             "1:1056177026184:web:53427486a28076270e5b3d"
-};
-
-const firebaseApp = initializeApp(firebaseConfig);
-const db = getFirestore(firebaseApp);
 
 // ── Constants ──────────────────────────────────────────────────────
 const ALL_MEMBERS = ["Ranga Sai", "Shekar", "Naveen", "Mahesh", "Vinod"];

@@ -4,6 +4,16 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
   <title>ExpSplit Pro</title>
+  <script type="module">
+    import { auth } from './firebase-config.js';
+    import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+
+    onAuthStateChanged(auth, user => {
+      if (!user) {
+        window.location.href = 'login.html';
+      }
+    });
+  </script>
   <script type="module" src="APP.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -88,6 +98,7 @@ body {
    Header
 ══════════════════════════════════════════════════════ */
 .header {
+  position: relative;
   text-align: center;
   padding: 1.5rem 0 1.25rem;
   animation: fadeDown 0.5s ease both;
@@ -682,6 +693,26 @@ th:nth-child(5), td:nth-child(5) {
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+
+.logout-btn {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text2);
+  border-radius: 999px;
+  padding: 0.65rem 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.logout-btn:hover {
+  background: var(--teal);
+  color: white;
+  transform: translateY(-1px);
+}
   </style>
 
 <body>
@@ -698,6 +729,7 @@ th:nth-child(5), td:nth-child(5) {
       <h1>Exp<span class="brand">Split</span> Pro</h1>
     </div>
     <p>Room Expense Tracker · 5 Members · Live Sync</p>
+    <button id="logoutBtn" class="logout-btn">Logout</button>
   </header>
 
   <!-- Month Tabs -->
@@ -842,5 +874,11 @@ th:nth-child(5), td:nth-child(5) {
   <!-- Voice Response Toast (top position) -->
   <div id="voiceResponse" class="voice-toast"></div>
 
+  <script type="module" src="./auth.js"></script>
+  <script type="module">
+    import { logoutUser } from './auth.js';
+    const logoutButton = document.getElementById('logoutBtn');
+    logoutButton?.addEventListener('click', logoutUser);
+  </script>
 </body>
 </html>

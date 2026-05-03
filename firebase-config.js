@@ -1,6 +1,7 @@
 // 🔥 Import Firebase (CDN)
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
-import { getFirestore, collection, addDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, collection, addDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // 🔥 Your config
 export const firebaseConfig = {
@@ -14,7 +15,8 @@ export const firebaseConfig = {
 
 // 🔥 Initialize
 const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
 const db = getFirestore(app);
 
-// 🔥 Export for APP.js
-export { db, collection, addDoc, onSnapshot };
+// 🔥 Export for APP.js and auth.js
+export { auth, db, collection, addDoc, onSnapshot };
