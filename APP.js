@@ -45,33 +45,16 @@ function monthLabel(id) {
 
 // ── Firestore: Config doc ──────────────────────────────────────────
 async function discoverMonths() {
-  const discovered = new Set();
-  
-  // Scan last 24 months (efficient client-side)
-  const now = new Date();
-  for (let i = 0; i < 24; i++) {
-    const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const id = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-    
-    // Quick check: try get first expense
-    try {
-      const q = query(collection(db, 'months', id, 'expenses'), limit(1));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        discovered.add(id);
-        console.log(`Found data: ${id}`);
-      }
-    } catch (e) {
-      // Month doesn't exist → skip
-    }
+  try {
+    const snap = await getDocs(collection(db, 'months'));
+    const monthsFromDb = snap.docs.map(d => d.id).sort().reverse();
+    const newMonths = monthsFromDb.map(id => ({ id, name: monthLabel(id) }));
+    console.log(`Discovered ${newMonths.length} months with data:`, newMonths.map(m => m.id));
+    return newMonths;
+  } catch (e) {
+    console.error('discoverMonths:', e);
+    return [];
   }
-  
-  const newMonths = Array.from(discovered).sort().reverse().map(id => ({
-    id, name: monthLabel(id)
-  }));
-  
-  console.log(`Discovered ${newMonths.length} months with data:`, newMonths.map(m => m.id));
-  return newMonths;
 }
 
 async function loadConfig() {
@@ -416,7 +399,7 @@ function renderBalance(balances) {
                 : b.balance < -0.01 ? `-₹${fmt(Math.abs(b.balance))} to pay` : 'Settled ✓';
     const init  = b.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
     const isPaid = currentMonth && paidMap[currentMonth] && paidMap[currentMonth][b.name];
-    const paidHtml = isPaid ? `<button class="icon-btn" style="color:var(--green);border-radius:8px;background:var(--green-bg);font-weight:700;">✓ Paid</button>` : `<button class="icon-btn" onclick="togglePaid('${b.name}')" style="border-radius:8px;">Mark Paid</button>`;
+    const paidHtml = isPaid ? `<button class="icon-btn paid-tag" style="color:var(--green);border-radius:8px;background:var(--green-bg);font-weight:700;">✓ Settled</button>` : `<button class="icon-btn" onclick="togglePaid('${b.name}')" style="border-radius:8px;">Mark Settled</button>`;
     return `<div class="balance-card">
       <div class="bc-header">
         <div class="avatar ${cls}">${init}</div>
@@ -438,15 +421,26 @@ async function togglePaid(name) {
   paidMap[currentMonth][name] = !cur;
   await saveConfig();
   renderAll();
-  showToast(!cur ? `${name} marked paid` : `${name} unmarked paid`, !cur ? 'success' : 'info');
+  showToast(!cur ? `${name} marked settled` : `${name} unmarked settled`, !cur ? 'success' : 'info');
 }
 
 // ── Render: Settlement ─────────────────────────────────────────────
 function renderSettlement(txns) {
   const el = document.getElementById('settlementList');
   if (!expenses.length) { el.innerHTML = `<div class="empty-state"><div class="empty-icon">🤝</div>No expenses yet</div>`; return; }
-  if (!txns.length) { el.innerHTML = `<div class="all-settled"><div class="icon">🎉</div>Everyone is settled!</div>`; return; }
-  el.innerHTML = txns.map(t => {
+
+  const present = presentMembers();
+  const actionsHtml = present.map(name => {
+    const isPaid = currentMonth && paidMap[currentMonth] && paidMap[currentMonth][name];
+    return `<button class="settle-btn${isPaid ? ' settled' : ''}" onclick="togglePaid('${name}')">${isPaid ? `✓ ${name} settled` : `Mark ${name} settled`}</button>`;
+  }).join('');
+
+  if (!txns.length) {
+    el.innerHTML = `<div class="settlement-actions">${actionsHtml}</div><div class="all-settled"><div class="icon">🎉</div>Everyone is settled!</div>`;
+    return;
+  }
+
+  el.innerHTML = `<div class="settlement-actions">${actionsHtml}</div>` + txns.map(t => {
     const fi = t.from.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
     const ti = t.to.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
     return `<div class="txn">
