@@ -17,6 +17,7 @@ let expenses      = [];
 let months        = [];
 let currentMonth  = null;
 let presentMap    = {};   // { "2026-03": ["Ranga Sai", ...] }
+let paidMap       = {};   // { "2026-03": { "Ranga Sai": true } }
 let editingId     = null;
 let chart         = null;
 let unsubExpenses = null;
@@ -81,6 +82,7 @@ async function loadConfig() {
       const d = snap.data();
       months = d.months || [];
       presentMap = d.presentMap || {};
+        paidMap = d.paidMap || {};
       currentMonth = d.currentMonth || null;
     }
     
@@ -94,6 +96,9 @@ async function loadConfig() {
         months.unshift(dm);  // Add new at top
         if (!presentMap[dm.id]) {
           presentMap[dm.id] = [...ALL_MEMBERS];
+        }
+        if (!paidMap[dm.id]) {
+          paidMap[dm.id] = {};
         }
       }
     });
@@ -109,7 +114,7 @@ async function loadConfig() {
 }
 async function saveConfig() {
   try {
-    await setDoc(doc(db, 'config', 'main'), { months, presentMap, currentMonth });
+    await setDoc(doc(db, 'config', 'main'), { months, presentMap, paidMap, currentMonth });
   } catch (e) { console.error('saveConfig:', e); }
 }
 
@@ -150,6 +155,7 @@ async function createCurrentMonth() {
   
   months.unshift({ id, name });
   presentMap[id] = [...ALL_MEMBERS];
+  paidMap[id] = {};
   currentMonth = id;
   await saveConfig();
   renderMonthTabs();
@@ -373,7 +379,14 @@ function calcBalances(present, share) {
   const paid = {};
   ALL_MEMBERS.forEach(m => (paid[m] = 0));
   expenses.forEach(e => { if (paid[e.person] !== undefined) paid[e.person] += e.amount; });
-  return present.map(name => ({ name, paid: paid[name], share, balance: paid[name] - share }));
+  const rows = present.map(name => ({ name, paid: paid[name], share, balance: paid[name] - share }));
+  // If a member is marked paid (externally settled), treat their balance as zero
+  if (currentMonth && paidMap[currentMonth]) {
+    rows.forEach(r => {
+      if (paidMap[currentMonth][r.name]) r.balance = 0;
+    });
+  }
+  return rows;
 }
 function calcSettlement(balances) {
   const p = balances.map(b => ({ name: b.name, balance: +b.balance.toFixed(2) }));
@@ -402,16 +415,30 @@ function renderBalance(balances) {
     const label = b.balance > 0.01 ? `+₹${fmt(b.balance)} to receive`
                 : b.balance < -0.01 ? `-₹${fmt(Math.abs(b.balance))} to pay` : 'Settled ✓';
     const init  = b.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+    const isPaid = currentMonth && paidMap[currentMonth] && paidMap[currentMonth][b.name];
+    const paidHtml = isPaid ? `<button class="icon-btn" style="color:var(--green);border-radius:8px;background:var(--green-bg);font-weight:700;">✓ Paid</button>` : `<button class="icon-btn" onclick="togglePaid('${b.name}')" style="border-radius:8px;">Mark Paid</button>`;
     return `<div class="balance-card">
       <div class="bc-header">
         <div class="avatar ${cls}">${init}</div>
         <span class="bc-name">${b.name}</span>
         <span class="bc-badge ${cls}">${label}</span>
+        ${paidHtml}
       </div>
       <div class="bc-bar-wrap"><div class="bc-bar ${cls}" style="width:${pct}%"></div></div>
       <div class="bc-sub">Paid ₹${fmt(b.paid)} · Share ₹${fmt(b.share)}</div>
     </div>`;
   }).join('');
+}
+
+// Toggle paid status for a member in the current month
+async function togglePaid(name) {
+  if (!currentMonth) return;
+  if (!paidMap[currentMonth]) paidMap[currentMonth] = {};
+  const cur = !!paidMap[currentMonth][name];
+  paidMap[currentMonth][name] = !cur;
+  await saveConfig();
+  renderAll();
+  showToast(!cur ? `${name} marked paid` : `${name} unmarked paid`, !cur ? 'success' : 'info');
 }
 
 // ── Render: Settlement ─────────────────────────────────────────────
@@ -543,6 +570,7 @@ window.downloadReport     = downloadReport;
 window.selectMonth        = selectMonth;
 window.createCurrentMonth = createCurrentMonth;
 window.toggleMember       = toggleMember;
+window.togglePaid         = togglePaid;
 
 // ── VOICE ASSISTANT FUNCTIONS ─────────────────────────────────────
 
